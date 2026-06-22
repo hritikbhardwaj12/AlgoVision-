@@ -23,15 +23,15 @@ import {
 
 interface ScrapedExample {
   label: string;
-  nums: string;
-  target: string;
+  variables: Record<string, string>;
+  output: string;
 }
 
 export default function App() {
   const [activePresetId, setActivePresetId] = useState<string>('twoSum');
   const [code, setCode] = useState<string>('');
-  const [customArrayStr, setCustomArrayStr] = useState<string>('[2, 7, 11, 15]');
-  const [customTargetStr, setCustomTargetStr] = useState<string>('9');
+  const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
+  const [expectedOutput, setExpectedOutput] = useState<string>('');
   const [examples, setExamples] = useState<ScrapedExample[]>([]);
   const [activeExampleLabel, setActiveExampleLabel] = useState<string>('');
   
@@ -41,10 +41,82 @@ export default function App() {
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1000); // ms per step
   const [compileError, setCompileError] = useState<string | null>(null);
 
+  const [customTitle, setCustomTitle] = useState<string>('');
+  const [isResizingHorizontally, setIsResizingHorizontally] = useState<boolean>(false);
+  const [isResizingVertically, setIsResizingVertically] = useState<boolean>(false);
+  const [leftWidth, setLeftWidth] = useState<number>(40); // default 40%
+  const [leftTopHeight, setLeftTopHeight] = useState<number>(260); // default 260px
+
+  // Floating Variable Watcher draggable state
+  const [watcherOffset, setWatcherOffset] = useState({ x: 0, y: 0 });
+  const [isDraggingWatcher, setIsDraggingWatcher] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const handleWatcherPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDraggingWatcher(true);
+    setDragStart({
+      x: e.clientX - watcherOffset.x,
+      y: e.clientY - watcherOffset.y
+    });
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleWatcherPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingWatcher) return;
+    const newX = e.clientX - dragStart.x;
+    const newY = e.clientY - dragStart.y;
+    setWatcherOffset({ x: newX, y: newY });
+  };
+
+  const handleWatcherPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    setIsDraggingWatcher(false);
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   const decorationRef = useRef<string[]>([]);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const intervalRef = useRef<any>(null);
+
+  const canvasParentRef = useRef<HTMLDivElement>(null);
+  const canvasContentRef = useRef<HTMLDivElement>(null);
+  const [scaleFactor, setScaleFactor] = useState<number>(1);
+
+  useEffect(() => {
+    const updateScale = () => {
+      if (!canvasParentRef.current || !canvasContentRef.current) return;
+      
+      // Temporary reset to measure natural size
+      canvasContentRef.current.style.transform = 'scale(1)';
+      
+      requestAnimationFrame(() => {
+        if (!canvasParentRef.current || !canvasContentRef.current) return;
+        const parentWidth = canvasParentRef.current.clientWidth - 16;
+        const parentHeight = canvasParentRef.current.clientHeight - 16;
+        
+        const contentWidth = canvasContentRef.current.scrollWidth;
+        const contentHeight = canvasContentRef.current.scrollHeight;
+        
+        if (contentWidth > 0 && contentHeight > 0) {
+          const widthRatio = parentWidth / contentWidth;
+          const heightRatio = parentHeight / contentHeight;
+          const newScale = Math.min(1, Math.min(widthRatio, heightRatio) * 0.98);
+          setScaleFactor(newScale);
+        }
+      });
+    };
+
+    updateScale();
+    
+    const resizeObserver = new ResizeObserver(updateScale);
+    if (canvasParentRef.current) {
+      resizeObserver.observe(canvasParentRef.current);
+    }
+    
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [currentStepIndex, steps, code]);
 
   const preset: AlgorithmPreset = PRESETS[activePresetId];
   const currentStep = steps[currentStepIndex] || null;
@@ -55,10 +127,16 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     const paramCode = params.get('code');
     const paramExamplesStr = params.get('examples');
+    const paramTitle = params.get('title');
     const hasUrlParams = window.location.search.includes('code=');
 
     if (hasUrlParams && paramCode) {
       setCode(paramCode);
+      if (paramTitle) {
+        setCustomTitle(paramTitle);
+      } else {
+        setCustomTitle('Custom Solution');
+      }
       
       let parsedExamples: ScrapedExample[] = [];
       try {
@@ -69,50 +147,126 @@ export default function App() {
 
       if (parsedExamples.length > 0) {
         const first = parsedExamples[0];
-        setCustomArrayStr(first.nums);
-        setCustomTargetStr(first.target);
+        setCustomInputs(first.variables || {});
+        setExpectedOutput(first.output || '');
         setActiveExampleLabel(first.label);
         
-        let arr: number[] = [2, 7, 11, 15];
-        try { arr = JSON.parse(first.nums); } catch (e) {}
-        handleCompileAndRun(paramCode, arr, Number(first.target));
+        const evaluatedInputs: Record<string, any> = {};
+        for (const [k, v] of Object.entries(first.variables || {})) {
+          try {
+            evaluatedInputs[k] = JSON.parse(v as string);
+          } catch (e) {
+            evaluatedInputs[k] = Number(v) || v;
+          }
+        }
+        handleCompileAndRun(paramCode, evaluatedInputs);
       } else {
         // Fallback if no examples scraped
-        setCustomArrayStr('[2,7,11,15]');
-        setCustomTargetStr('9');
-        let arr = [2, 7, 11, 15];
-        handleCompileAndRun(paramCode, arr, 9);
+        const fallback = { nums: '[2,7,11,15]', target: '9' };
+        setCustomInputs(fallback);
+        setExpectedOutput('');
+        handleCompileAndRun(paramCode, { nums: [2, 7, 11, 15], target: 9 });
       }
-      
-      // Clear parameters for a clean reload experience
-      window.history.replaceState({}, document.title, window.location.pathname);
     } else {
       setCode(preset.code);
-      setCustomArrayStr(JSON.stringify(preset.defaultArray));
-      setCustomTargetStr(preset.defaultTarget !== undefined ? String(preset.defaultTarget) : '3');
+      setCustomInputs(preset.defaultInputs);
+      setExpectedOutput(preset.expectedOutput || '');
       setExamples([]);
       setActiveExampleLabel('');
+      setCustomTitle('');
       
-      handleCompileAndRun(preset.code, preset.defaultArray, preset.defaultTarget);
+      const evaluatedInputs: Record<string, any> = {};
+      for (const [k, v] of Object.entries(preset.defaultInputs)) {
+        try {
+          evaluatedInputs[k] = JSON.parse(v);
+        } catch (e) {
+          evaluatedInputs[k] = Number(v) || v;
+        }
+      }
+      handleCompileAndRun(preset.code, evaluatedInputs);
     }
   }, [activePresetId]);
 
+  // Set up real-time listener from LeetCode parent tab
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'LEETCODE_CODE_CHANGE') {
+        setCode(event.data.code);
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Handle horizontal resize dragging
+  useEffect(() => {
+    if (!isResizingHorizontally) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const containerWidth = window.innerWidth;
+      const newWidthPercent = Math.max(20, Math.min(85, (e.clientX / containerWidth) * 100));
+      setLeftWidth(newWidthPercent);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingHorizontally(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingHorizontally]);
+
+  // Handle vertical resize dragging (in the left column)
+  useEffect(() => {
+    if (!isResizingVertically) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const inputsElement = document.getElementById('inputs-config-container');
+      if (inputsElement) {
+        const rect = inputsElement.getBoundingClientRect();
+        const newHeight = Math.max(120, Math.min(600, e.clientY - rect.top));
+        setLeftTopHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingVertically(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingVertically]);
+
   // Main compiler handler
-  const handleCompileAndRun = (codeSource: string, arrayData?: number[], targetVal?: number) => {
+  const handleCompileAndRun = (codeSource: string, inputsMap?: Record<string, any>) => {
     setCompileError(null);
     setIsPlaying(false);
     
-    let arr: number[] = [];
-    try {
-      arr = JSON.parse(arrayData ? JSON.stringify(arrayData) : customArrayStr);
-      if (!Array.isArray(arr)) throw new Error("Input must be a valid array");
-    } catch (e: any) {
-      setCompileError("Array Parse Error: " + e.message);
-      return;
+    let evaluatedInputs: Record<string, any> = {};
+    if (inputsMap) {
+      evaluatedInputs = inputsMap;
+    } else {
+      for (const [k, v] of Object.entries(customInputs)) {
+        try {
+          evaluatedInputs[k] = JSON.parse(v);
+        } catch (e) {
+          const num = Number(v);
+          evaluatedInputs[k] = isNaN(num) ? v : num;
+        }
+      }
     }
 
-    const targetNum = targetVal !== undefined ? targetVal : Number(customTargetStr);
-    const traceResults = runCustomTrace(codeSource, arr, targetNum);
+    const traceResults = runCustomTrace(codeSource, evaluatedInputs);
     
     if (traceResults.length > 0) {
       if (traceResults[0].explanation.startsWith("Syntax or Runtime Error:")) {
@@ -129,15 +283,20 @@ export default function App() {
   // Load a scraped testcase example
   const handleLoadExample = (ex: ScrapedExample) => {
     setActiveExampleLabel(ex.label);
-    setCustomArrayStr(ex.nums);
-    setCustomTargetStr(ex.target);
+    setCustomInputs(ex.variables || {});
+    setExpectedOutput(ex.output || '');
     
-    let arr: number[] = [];
-    try {
-      arr = JSON.parse(ex.nums);
-    } catch (e) {}
+    const evaluatedInputs: Record<string, any> = {};
+    for (const [k, v] of Object.entries(ex.variables || {})) {
+      try {
+        evaluatedInputs[k] = JSON.parse(v as string);
+      } catch (e) {
+        const num = Number(v);
+        evaluatedInputs[k] = isNaN(num) ? v : num;
+      }
+    }
     
-    handleCompileAndRun(code, arr, Number(ex.target));
+    handleCompileAndRun(code, evaluatedInputs);
   };
 
   // Playback loop
@@ -163,22 +322,38 @@ export default function App() {
 
   // Highlight active lines
   useEffect(() => {
-    if (editorRef.current && monacoRef.current && currentStep) {
+    if (editorRef.current && monacoRef.current) {
       const editor = editorRef.current;
       const monaco = monacoRef.current;
 
-      decorationRef.current = editor.deltaDecorations(decorationRef.current, [
-        {
-          range: new monaco.Range(currentStep.line, 1, currentStep.line, 1),
-          options: {
-            isWholeLine: true,
-            className: 'bg-indigo-500/15 border-l-4 border-indigo-500',
+      if (currentStep && steps.length > 0) {
+        decorationRef.current = editor.deltaDecorations(decorationRef.current, [
+          {
+            range: new monaco.Range(currentStep.line, 1, currentStep.line, 1),
+            options: {
+              isWholeLine: true,
+              className: 'bg-indigo-500/15 border-l-4 border-indigo-500',
+            },
           },
-        },
-      ]);
-      editor.revealLineInCenterIfOutsideViewport(currentStep.line);
+        ]);
+        editor.revealLineInCenterIfOutsideViewport(currentStep.line);
+      } else {
+        decorationRef.current = editor.deltaDecorations(decorationRef.current, []);
+      }
     }
-  }, [currentStep?.line, steps]);
+  }, [currentStep?.line, steps, code]);
+
+  // Intercept Ctrl+S globally to compile and run code
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleCompileAndRun(code);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [code]);
 
   const handleSelectPreset = (id: string) => {
     setActivePresetId(id);
@@ -187,6 +362,12 @@ export default function App() {
   const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    
+    // Register Ctrl+S keyboard shortcut inside Monaco to compile and run
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      const currentCode = editor.getValue();
+      handleCompileAndRun(currentCode);
+    });
   };
 
   const handleStepNext = () => {
@@ -220,20 +401,62 @@ export default function App() {
     return '3.0x';
   };
 
+  // Helper to convert a linked list node structure to an array of values
+  const listNodeToArray = (node: any): any[] => {
+    const vals = [];
+    let curr = node;
+    const visited = new Set(); // Prevent infinite loops in cyclic lists
+    while (curr && typeof curr === 'object' && 'val' in curr && !visited.has(curr)) {
+      visited.add(curr);
+      vals.push(curr.val);
+      curr = curr.next;
+    }
+    return vals;
+  };
+
   // DYNAMICALLY EXTRACT ALL ARRAYS (NUMBERS & CHARACTERS) IN STATE
-  const getDetectedArrays = (): { name: string; values: any[] }[] => {
+  const getDetectedArrays = (): { name: string; values: any[]; is2D?: boolean; originalType?: string }[] => {
     if (!currentStep || !currentStep.state) return [];
-    const arrays: { name: string; values: any[] }[] = [];
+    const arrays: { name: string; values: any[]; is2D?: boolean; originalType?: string }[] = [];
     
     for (const [key, val] of Object.entries(currentStep.state)) {
-      if (Array.isArray(val) && val.every(item => typeof item === 'number' || typeof item === 'string')) {
-        arrays.push({ name: key, values: val });
+      if (val !== undefined && val !== null) {
+        if (Array.isArray(val)) {
+          // Check if it's a 2D array (array of arrays, or array of strings, or array of StringBuilders)
+          const is2DArray = val.length > 0 && val.every(item => {
+            if (Array.isArray(item)) return true;
+            if (typeof item === 'string') return true;
+            if (item && typeof item === 'object' && 'str' in item) return true; // polyfilled StringBuilder
+            return false;
+          });
+          
+          if (is2DArray) {
+            // Normalize rows for visualization
+            const normalizedRows = val.map(item => {
+              if (Array.isArray(item)) return item;
+              if (typeof item === 'string') return item;
+              if (item && typeof item === 'object' && 'str' in item) return String(item.str);
+              return String(item);
+            });
+            arrays.push({ name: key, values: normalizedRows, is2D: true, originalType: '2d' });
+          } else if (val.every(item => typeof item === 'number' || typeof item === 'string')) {
+            arrays.push({ name: key, values: val, originalType: '1d' });
+          }
+        } else if (typeof val === 'string' && val.length >= 1 && key !== 'expectedOutput' && !key.toLowerCase().includes('output') && key !== 'code' && key !== 'activePresetId') {
+          arrays.push({ name: key, values: val.split(''), originalType: 'string' });
+        } else if (typeof val === 'object' && 'val' in val && 'next' in val) {
+          // It's a ListNode! Convert it to an array of values for visualization!
+          arrays.push({ name: key, values: listNodeToArray(val), originalType: 'linkedlist' });
+        } else if (val && typeof val === 'object' && 'str' in val) {
+          // Polyfilled StringBuilder
+          arrays.push({ name: key, values: String(val.str).split(''), originalType: 'string' });
+        }
       }
     }
     
     // Fallback if no array was explicitly captured in step scope
     if (arrays.length === 0 && currentStep.state.arr) {
-      arrays.push({ name: 'nums', values: currentStep.state.arr });
+      arrays.push({ name: 'nums', values: currentStep.state.arr, originalType: '1d' });
     }
     return arrays;
   };
@@ -245,18 +468,18 @@ export default function App() {
     if (!currentStep || !currentStep.state) return {};
     const pointers: Record<number, string[]> = {};
     
+    // Ignore quantities, metrics, or benchmarks that represent answers instead of indices
+    const ignoreKeywords = ['target', 'sum', 'max', 'min', 'count', 'length', 'size', 'k', 'n', 'val', 'ans', 'result', 'temp'];
+
     for (const [key, val] of Object.entries(currentStep.state)) {
+      const isIgnored = ignoreKeywords.some(kw => key.toLowerCase().includes(kw));
+      
       if (
         typeof val === 'number' && 
         Number.isInteger(val) && 
         val >= 0 && 
         val < arrayLength &&
-        key !== 'target' && 
-        key !== 'sum' && 
-        key !== 'maxSum' && 
-        key !== 'windowSum' && 
-        key !== 'k' &&
-        key !== 'n'
+        !isIgnored
       ) {
         if (!pointers[val]) {
           pointers[val] = [];
@@ -292,9 +515,20 @@ export default function App() {
             else if (val < prevVal) trend = 'down';
           }
         }
+        
+        let formattedValue = '';
+        if (val instanceof Set) {
+          formattedValue = `{${Array.from(val).map(x => typeof x === 'string' ? `'${x}'` : String(x)).join(', ')}}`;
+        } else if (val instanceof Map) {
+          const pairs = Array.from(val.entries()).map(([k, v]) => `${k} => ${v}`).join(', ');
+          formattedValue = `{${pairs}}`;
+        } else {
+          formattedValue = typeof val === 'object' ? JSON.stringify(val) : String(val);
+        }
+
         entries.push({ 
           key, 
-          value: typeof val === 'object' ? JSON.stringify(val) : String(val),
+          value: formattedValue,
           trend 
         });
       }
@@ -360,22 +594,31 @@ export default function App() {
           </div>
         </div>
 
-        {/* Preset Selectors */}
-        <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-800/80 p-1.5 rounded-2xl">
-          {Object.values(PRESETS).map((p) => (
-            <button
-              key={p.id}
-              onClick={() => handleSelectPreset(p.id)}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold font-mono tracking-wider transition-all duration-300 ${
-                activePresetId === p.id && examples.length === 0
-                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
+        {/* Preset Selectors or Problem Title */}
+        {window.location.search.includes('code=') ? (
+          <div className="flex items-center gap-2 bg-indigo-950/40 border border-indigo-900/60 px-4 py-2.5 rounded-2xl">
+            <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
+            <span className="text-xs font-semibold font-mono tracking-wider text-indigo-300">
+              {customTitle || 'Custom LeetCode Solution'}
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-800/80 p-1.5 rounded-2xl">
+            {Object.values(PRESETS).map((p) => (
+              <button
+                key={p.id}
+                onClick={() => handleSelectPreset(p.id)}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold font-mono tracking-wider transition-all duration-300 ${
+                  activePresetId === p.id && examples.length === 0
+                    ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-500/20'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                }`}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <span className="flex h-2 w-2 relative">
@@ -386,13 +629,28 @@ export default function App() {
         </div>
       </header>
 
+      {/* Overlay to catch all pointer events during resize dragging */}
+      {(isResizingHorizontally || isResizingVertically) && (
+        <div 
+          className="fixed inset-0 z-50 select-none pointer-events-auto" 
+          style={{ cursor: isResizingHorizontally ? 'col-resize' : 'row-resize' }} 
+        />
+      )}
+
       {/* Main Workstation */}
-      <main className="flex flex-1 overflow-hidden p-6 gap-6">
+      <main className="flex flex-1 overflow-hidden p-6 gap-0">
         
         {/* Left Side: Editor & Configuration inputs */}
-        <div className="flex flex-col w-5/12 gap-5">
+        <div 
+          className="flex flex-col flex-shrink-0 overflow-hidden"
+          style={{ width: `${leftWidth}%` }}
+        >
           {/* Inputs Config */}
-          <div className="bg-slate-900/40 border border-slate-900 rounded-3xl p-5 backdrop-blur-md shadow-xl flex flex-col gap-4">
+          <div 
+            id="inputs-config-container"
+            style={{ height: `${leftTopHeight}px` }}
+            className="bg-slate-900/40 border border-slate-900 rounded-3xl p-5 backdrop-blur-md shadow-xl flex flex-col gap-4 overflow-y-auto flex-shrink-0"
+          >
             <h2 className="text-xs font-bold font-mono text-slate-400 flex items-center gap-2 tracking-wider">
               <Hash className="w-4 h-4 text-indigo-400" />
               EXECUTION INPUTS CONFIGURATION
@@ -424,26 +682,31 @@ export default function App() {
             )}
 
             <div className="grid grid-cols-12 gap-4">
-              <div className="col-span-8 flex flex-col gap-1.5">
-                <label className="text-[10px] font-mono text-slate-500 uppercase">Input Array (nums / arr)</label>
-                <input
-                  type="text"
-                  value={customArrayStr}
-                  onChange={(e) => setCustomArrayStr(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono text-indigo-300 focus:outline-none focus:border-indigo-600 transition-colors w-full"
-                  placeholder="e.g. [-3, 10, -7, 4]"
-                />
-              </div>
-              <div className="col-span-4 flex flex-col gap-1.5">
-                <label className="text-[10px] font-mono text-slate-500 uppercase">Target (k / target)</label>
-                <input
-                  type="text"
-                  value={customTargetStr}
-                  onChange={(e) => setCustomTargetStr(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono text-indigo-300 focus:outline-none focus:border-indigo-600 transition-colors w-full"
-                  placeholder="e.g. 9"
-                />
-              </div>
+              {Object.entries(customInputs).map(([key, val]) => (
+                <div key={key} className="col-span-6 flex flex-col gap-1.5">
+                  <label className="text-[10px] font-mono text-slate-500 uppercase">Input Variable ({key})</label>
+                  <input
+                    type="text"
+                    value={val}
+                    onChange={(e) => {
+                      setCustomInputs(prev => ({
+                        ...prev,
+                        [key]: e.target.value
+                      }));
+                    }}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm font-mono text-indigo-300 focus:outline-none focus:border-indigo-600 transition-colors w-full"
+                    placeholder={`Value for ${key}`}
+                  />
+                </div>
+              ))}
+              {expectedOutput && (
+                <div className="col-span-12 flex flex-col gap-1.5 border-t border-slate-900/50 pt-2.5">
+                  <label className="text-[10px] font-mono text-slate-500 uppercase">Expected Output</label>
+                  <div className="bg-slate-950 border border-slate-900 rounded-xl px-4 py-2.5 text-sm font-mono text-emerald-400">
+                    {expectedOutput}
+                  </div>
+                </div>
+              )}
             </div>
             <button
               onClick={() => handleCompileAndRun(code)}
@@ -452,6 +715,18 @@ export default function App() {
               <PlayCircle className="w-4 h-4" />
               COMPILE & RUN VISUALIZATION
             </button>
+          </div>
+
+          {/* Vertical Drag Handle (Row Resizer) */}
+          <div 
+            onMouseDown={() => setIsResizingVertically(true)}
+            className="h-5 cursor-row-resize flex items-center justify-center group flex-shrink-0"
+          >
+            <div className={`h-1 w-24 rounded-full transition-all duration-300 ${
+              isResizingVertically 
+                ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] w-32' 
+                : 'bg-slate-800 group-hover:bg-indigo-500 group-hover:shadow-[0_0_8px_rgba(99,102,241,0.5)]'
+            }`} />
           </div>
 
           {/* Monaco Editor */}
@@ -468,10 +743,16 @@ export default function App() {
             <div className="flex-1 bg-slate-950/60 p-2">
               <Editor
                 height="100%"
-                defaultLanguage="javascript"
+                language={code.includes('class ') || code.includes('public ') || code.includes('private ') || code.includes('ListNode') || code.includes('TreeNode') ? 'java' : 'javascript'}
                 theme="vs-dark"
                 value={code}
-                onChange={(val) => setCode(val || '')}
+                onChange={(val) => {
+                  const updated = val || '';
+                  setCode(updated);
+                  if (window.opener) {
+                    window.opener.postMessage({ type: 'ALGOVISION_CODE_CHANGE', code: updated }, '*');
+                  }
+                }}
                 onMount={handleEditorDidMount}
                 options={{
                   readOnly: false,
@@ -494,9 +775,21 @@ export default function App() {
           </div>
         </div>
 
+        {/* Horizontal Drag Handle (Column Resizer) */}
+        <div 
+          onMouseDown={() => setIsResizingHorizontally(true)}
+          className="w-6 cursor-col-resize flex items-center justify-center group flex-shrink-0"
+        >
+          <div className={`w-1 h-24 rounded-full transition-all duration-300 ${
+            isResizingHorizontally 
+              ? 'bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)] h-32' 
+              : 'bg-slate-800 group-hover:bg-indigo-500 group-hover:shadow-[0_0_8px_rgba(99,102,241,0.5)]'
+          }`} />
+        </div>
+
         {/* Right Side: Dynamic Visualizer Area */}
         <div className="flex flex-col flex-1 gap-6 overflow-hidden">
-          <div className="flex-1 flex flex-col bg-slate-900/40 border border-slate-900 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md">
+          <div className="relative flex-1 flex flex-col bg-slate-900/40 border border-slate-900 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-900 bg-slate-950/40">
               <span className="text-xs font-mono text-slate-400 flex items-center gap-2">
                 <Layers className="w-4 h-4 text-indigo-400" />
@@ -511,149 +804,270 @@ export default function App() {
             </div>
 
             {/* Dynamic Rendering Canvas */}
-            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-slate-950/20 overflow-auto gap-6">
-              
-              {/* Dynamic Math Banner */}
-              {mathDetails && (
-                <div className={`px-5 py-2.5 rounded-2xl border text-xs font-mono font-bold flex items-center gap-2.5 transition-all duration-300 transform scale-95 shadow-md ${
-                  mathDetails.match 
-                    ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300 shadow-emerald-500/10 animate-bounce' 
-                    : 'bg-slate-900/90 border-slate-800 text-indigo-300'
-                }`}>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-slate-950 text-slate-500 uppercase">COMPARING</span>
-                  <span>
-                    {mathDetails.arrayName}[{mathDetails.p1Name}] + {mathDetails.arrayName}[{mathDetails.p2Name}] ➜ ({mathDetails.valI}) + ({mathDetails.valJ}) = {mathDetails.sum}
-                  </span>
-                  <span>{mathDetails.match ? '===' : '!=='}</span>
-                  <span className={mathDetails.match ? 'text-emerald-400' : 'text-slate-500'}>
-                    target ({mathDetails.target})
-                  </span>
-                </div>
-              )}
+            <div ref={canvasParentRef} className="flex-1 flex flex-col items-center justify-center p-4 bg-slate-950/20 overflow-hidden relative w-full h-full min-h-0">
+              <div 
+                ref={canvasContentRef}
+                style={{
+                  transform: `scale(${scaleFactor})`,
+                  transformOrigin: 'center center',
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '12px'
+                }}
+                className="min-h-0"
+              >
+                {/* Dynamic Math Banner */}
+                {mathDetails && (
+                  <div className={`px-4 py-1.5 rounded-xl border text-[11px] font-mono font-bold flex items-center gap-2 transition-all duration-300 transform scale-95 shadow-md ${
+                    mathDetails.match 
+                      ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300 shadow-emerald-500/10' 
+                      : 'bg-slate-900/90 border-slate-800 text-indigo-300'
+                  }`}>
+                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-950 text-slate-500 uppercase">COMPARING</span>
+                    <span>
+                      {mathDetails.arrayName}[{mathDetails.p1Name}] + {mathDetails.arrayName}[{mathDetails.p2Name}] ➜ ({mathDetails.valI}) + ({mathDetails.valJ}) = {mathDetails.sum}
+                    </span>
+                    <span>{mathDetails.match ? '===' : '!=='}</span>
+                    <span className={mathDetails.match ? 'text-emerald-400' : 'text-slate-500'}>
+                      target ({mathDetails.target})
+                    </span>
+                  </div>
+                )}
 
-              {currentStep && currentStep.state && detectedArrays.length > 0 ? (
-                <div className="w-full flex flex-col gap-8 justify-center">
-                  
-                  {/* Map and render each detected array automatically */}
-                  {detectedArrays.map((arrayInfo, arrayIdx) => {
-                    const pointers = getPointersForArray(arrayInfo.values.length);
+                {currentStep && currentStep.state && detectedArrays.length > 0 ? (
+                  <div className="w-full flex flex-row flex-wrap gap-4 justify-center items-center py-1">
                     
-                    return (
-                      <div key={arrayIdx} className="flex flex-col items-center w-full">
-                        <div className="text-xs font-mono font-semibold text-slate-500 uppercase tracking-wider mb-2.5 self-start pl-12 flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                          Array: {arrayInfo.name}
-                        </div>
+                    {/* Map and render each detected array automatically */}
+                    {detectedArrays.map((arrayInfo, arrayIdx) => {
+                      const pointers = getPointersForArray(arrayInfo.values.length);
+                      const len = arrayInfo.values.length;
+                      
+                      // Dynamic sizing configurations based on number of items to prevent overflow/scrolling
+                      let boxSizeClass = 'w-11 h-12 text-sm rounded-xl';
+                      let badgeSizeClass = 'text-[9px] px-1 py-0.2';
+                      let spacingClass = 'gap-1.5';
+                      let containerGapClass = 'gap-1.5';
+                      let pointerContainerHeight = 'h-10';
+                      
+                      if (detectedArrays.length > 1) {
+                        boxSizeClass = 'w-9 h-10 text-xs rounded-lg';
+                        spacingClass = 'gap-1';
+                        containerGapClass = 'gap-1';
+                        pointerContainerHeight = 'h-8';
+                      }
+                      
+                      if (len > 8 && len <= 16) {
+                        boxSizeClass = 'w-8 h-9 text-xs rounded-lg';
+                        badgeSizeClass = 'text-[8px] px-0.8 py-0.2';
+                        spacingClass = 'gap-1';
+                        containerGapClass = 'gap-1';
+                        pointerContainerHeight = 'h-8';
+                      } else if (len > 16) {
+                        boxSizeClass = 'w-6 h-7 text-[10px] rounded-md';
+                        badgeSizeClass = 'text-[7px] px-0.5 py-0.1';
+                        spacingClass = 'gap-0.5';
+                        containerGapClass = 'gap-0.5';
+                        pointerContainerHeight = 'h-7';
+                      }
+                      
+                      // Dynamic sizing for 2D Grid
+                      let gridBoxSizeClass = 'w-9 h-9 rounded-xl text-sm';
+                      let gridGapClass = 'gap-1.5';
+                      let gridPaddingClass = 'p-3.5';
+                      let gridRowHeaderWidth = 'w-20';
+                      let gridLabelSizeClass = 'text-[9px]';
+                      
+                      if (arrayInfo.is2D) {
+                        const maxCols = Math.max(...arrayInfo.values.map(row => {
+                          const cells = typeof row === 'string' ? row.split('') : (Array.isArray(row) ? row : [row]);
+                          return cells.length;
+                        }), 0);
+                        const numRows = arrayInfo.values.length;
                         
-                        <div className="flex items-end gap-3 w-full justify-center relative">
-                          {arrayInfo.values.map((val, idx) => {
-                            const activePointers = pointers[idx] || [];
-                            const isBeingPointed = activePointers.length > 0;
-                            const isMid = activePointers.includes('mid');
-
-                            let boxClass = 'bg-slate-900 border-slate-800 text-slate-300';
-                            if (isMid) {
-                              boxClass = 'bg-yellow-950/40 border-yellow-500 text-yellow-300 shadow-md shadow-yellow-500/10';
-                            } else if (isBeingPointed) {
-                              boxClass = 'bg-indigo-950/40 border-indigo-500 text-indigo-200 shadow-md shadow-indigo-500/10';
-                            }
-
-                            return (
-                              <div key={idx} className="flex flex-col items-center gap-3">
-                                <span className="text-[10px] text-slate-500 font-mono">[{idx}]</span>
+                        if (numRows > 12 || maxCols > 24) {
+                          gridBoxSizeClass = 'w-5 h-5 rounded text-[8px]';
+                          gridGapClass = 'gap-0.5';
+                          gridPaddingClass = 'p-1.5';
+                          gridRowHeaderWidth = 'w-14';
+                          gridLabelSizeClass = 'text-[8px]';
+                        } else if (numRows > 6 || maxCols > 12) {
+                          gridBoxSizeClass = 'w-7 h-7 rounded-lg text-xs';
+                          gridGapClass = 'gap-1';
+                          gridPaddingClass = 'p-2.5';
+                          gridRowHeaderWidth = 'w-16';
+                          gridLabelSizeClass = 'text-[9px]';
+                        }
+                      }
+                      
+                      return (
+                        <div key={arrayIdx} className="flex flex-col items-center w-auto max-w-full flex-shrink-0 min-h-0 bg-slate-900/30 border border-slate-800/40 p-3 rounded-2xl shadow-sm">
+                          <div className="text-[10px] font-mono font-semibold text-indigo-400/90 uppercase tracking-wider mb-2 flex items-center gap-1.5 self-start px-1">
+                            <span className="w-1 h-1 rounded-full bg-indigo-500"></span>
+                            Array: {arrayInfo.name}
+                          </div>
+                          
+                          {arrayInfo.is2D ? (
+                            <div className={`flex flex-col ${gridGapClass} bg-slate-950/40 border border-slate-900 ${gridPaddingClass} rounded-2xl w-full max-w-2xl overflow-hidden shadow-inner`}>
+                              {arrayInfo.values.map((row, rIdx) => {
+                                const cells = typeof row === 'string' ? row.split('') : (Array.isArray(row) ? row : [row]);
                                 
-                                <div className={`w-14 h-16 rounded-2xl border flex items-center justify-center font-bold text-lg font-mono transition-all duration-300 ${boxClass}`}>
-                                  {val}
-                                </div>
-
-                                {/* Dynamically list all pointer badges below this index */}
-                                <div className="h-14 flex flex-col items-center justify-start gap-1">
-                                  {activePointers.map((pName) => {
-                                    let badgeColor = 'bg-violet-950 border-violet-850 text-violet-400';
-                                    if (pName === 'left' || pName === 'start' || pName === 'low') {
-                                      badgeColor = 'bg-emerald-950 border-emerald-800 text-emerald-400';
-                                    } else if (pName === 'right' || pName === 'end' || pName === 'high') {
-                                      badgeColor = 'bg-red-950 border-red-800 text-red-400';
-                                    } else if (pName === 'mid') {
-                                      badgeColor = 'bg-yellow-950 border-yellow-800 text-yellow-400';
+                                // Check if any pointers in the state match this row index
+                                const rowPointers: string[] = [];
+                                if (currentStep && currentStep.state) {
+                                  for (const [k, v] of Object.entries(currentStep.state)) {
+                                    if (typeof v === 'number' && v === rIdx && (k.toLowerCase().includes('row') || k === 'r' || k === 'currow' || k === 'rowidx' || k === 'i')) {
+                                      rowPointers.push(k);
                                     }
-                                    
-                                    return (
-                                      <span key={pName} className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono shadow-sm ${badgeColor}`}>
-                                        {pName}
-                                      </span>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
+                                  }
+                                }
+
+                                return (
+                                  <div key={rIdx} className={`flex items-center ${gridGapClass} w-full`}>
+                                    <div className={`flex items-center gap-1 ${gridRowHeaderWidth} flex-shrink-0 justify-end`}>
+                                      {rowPointers.map(rp => (
+                                        <span key={rp} className="px-1.5 py-0.5 rounded text-[8px] font-bold font-mono bg-indigo-950 border border-indigo-900/60 text-indigo-400 animate-pulse">
+                                          {rp}
+                                        </span>
+                                      ))}
+                                      <span className={`${gridLabelSizeClass} text-slate-500 font-mono`}>Row {rIdx}:</span>
+                                    </div>
+                                    <div className={`flex ${gridGapClass}`}>
+                                      {cells.map((cell, cIdx) => (
+                                        <div 
+                                          key={cIdx} 
+                                          className={`${gridBoxSizeClass} border border-slate-800 bg-slate-900/60 flex items-center justify-center font-bold font-mono text-indigo-300 shadow transition-all duration-300 hover:border-indigo-500/50`}
+                                        >
+                                          {cell}
+                                        </div>
+                                      ))}
+                                      {cells.length === 0 && (
+                                        <span className={`${gridLabelSizeClass} text-slate-700 italic font-mono flex items-center`}>empty</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className={`flex items-center ${containerGapClass} w-full justify-center relative flex-nowrap py-1 overflow-x-auto overflow-y-hidden`}>
+                              {arrayInfo.values.map((val, idx) => {
+                                const activePointers = pointers[idx] || [];
+                                const isBeingPointed = activePointers.length > 0;
+                                const isMid = activePointers.includes('mid');
+                                const isLinkedList = code.includes('ListNode') || arrayInfo.name.toLowerCase().startsWith('l') || arrayInfo.name.toLowerCase().includes('list');
+
+                                let boxClass = 'bg-slate-900 border-slate-800 text-slate-300';
+                                if (isMid) {
+                                  boxClass = 'bg-yellow-950/40 border-yellow-500 text-yellow-300 shadow-md shadow-yellow-500/10';
+                                } else if (isBeingPointed) {
+                                  boxClass = 'bg-indigo-950/40 border-indigo-500 text-indigo-200 shadow-md shadow-indigo-500/10';
+                                }
+
+                                return (
+                                  <div key={idx} className="flex items-center gap-1 flex-shrink-0">
+                                    <div className={`flex flex-col items-center ${spacingClass}`}>
+                                      <span className="text-[9px] text-slate-500 font-mono">[{idx}]</span>
+                                      
+                                      <div className={`${boxSizeClass} border flex items-center justify-center font-bold font-mono transition-all duration-300 ${boxClass}`}>
+                                        {val}
+                                      </div>
+
+                                      {/* Dynamically list all pointer badges below this index */}
+                                      <div className={`${pointerContainerHeight} flex flex-col items-center justify-start gap-0.5`}>
+                                        {activePointers.map((pName) => {
+                                          let badgeColor = 'bg-violet-950 border-violet-850 text-violet-400';
+                                          if (pName === 'left' || pName === 'start' || pName === 'low') {
+                                            badgeColor = 'bg-emerald-950 border-emerald-800 text-emerald-400';
+                                          } else if (pName === 'right' || pName === 'end' || pName === 'high') {
+                                            badgeColor = 'bg-red-950 border-red-800 text-red-400';
+                                          } else if (pName === 'mid') {
+                                            badgeColor = 'bg-yellow-950 border-yellow-800 text-yellow-400';
+                                          }
+                                          
+                                          return (
+                                            <span key={pName} className={`rounded font-bold font-mono shadow-sm ${badgeSizeClass} ${badgeColor}`}>
+                                              {pName}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                    {isLinkedList && idx < arrayInfo.values.length - 1 && (
+                                      <div className="text-indigo-500 font-black text-xs pb-8 animate-pulse">➜</div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center text-center max-w-sm gap-3">
-                  <HelpCircle className="w-12 h-12 text-slate-700" />
-                  <p className="text-sm font-mono text-slate-500 leading-relaxed">
-                    Write code, define arguments, and click the Compile button to generate a dynamic execution sequence!
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* AI Explanation & Inspector panels */}
-          <div className="grid grid-cols-12 gap-6 min-h-[190px] max-h-[220px]">
-            {/* AI Tutor Card */}
-            <div className="col-span-8 flex flex-col bg-slate-900/40 border border-slate-900 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-900 bg-slate-950/40">
-                <Sparkles className="w-4 h-4 text-indigo-400" />
-                <span className="text-xs font-bold text-indigo-300 tracking-wider font-mono">DYNAMIC AI TUTOR EXPLANATIONS</span>
-              </div>
-              <div className="flex-1 p-5 overflow-y-auto flex items-start gap-4">
-                <div className="w-8 h-8 rounded-lg bg-indigo-900/30 border border-indigo-800/80 flex items-center justify-center text-indigo-400 flex-shrink-0">
-                  <Terminal className="w-4 h-4" />
-                </div>
-                <p className="text-sm text-slate-300 leading-relaxed font-mono">
-                  {compileError ? (
-                    <span className="text-red-400 font-bold block">{compileError}</span>
-                  ) : currentStep ? (
-                    currentStep.explanation
-                  ) : (
-                    "Waiting for code analysis..."
-                  )}
-                </p>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center text-center max-w-sm gap-3">
+                    {compileError ? (
+                      <>
+                        <div className="w-12 h-12 rounded-full bg-rose-950/50 border border-rose-800 flex items-center justify-center text-rose-400">
+                          <Terminal className="w-5 h-5" />
+                        </div>
+                        <p className="text-sm font-mono text-rose-400 font-semibold leading-relaxed">
+                          {compileError}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <HelpCircle className="w-12 h-12 text-slate-700" />
+                        <p className="text-sm font-mono text-slate-500 leading-relaxed">
+                          Write code, define arguments, and click the Compile button to generate a dynamic execution sequence!
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* General Variable Inspector Panel */}
-            <div className="col-span-4 flex flex-col bg-slate-900/40 border border-slate-900 rounded-3xl overflow-hidden shadow-2xl backdrop-blur-md">
-              <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-900 bg-slate-950/40">
-                <TrendingUp className="w-4 h-4 text-slate-400" />
-                <span className="text-xs font-bold tracking-wider text-slate-400 font-mono">VARIABLE WATCHER</span>
+            {/* Floating Variable Watcher in the bottom-right corner */}
+            <div 
+              style={{
+                transform: `translate(${watcherOffset.x}px, ${watcherOffset.y}px)`,
+                touchAction: 'none'
+              }}
+              className="absolute bottom-6 right-6 z-30 w-64 bg-slate-950/90 backdrop-blur-md border border-slate-800/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[200px]"
+            >
+              <div 
+                onPointerDown={handleWatcherPointerDown}
+                onPointerMove={handleWatcherPointerMove}
+                onPointerUp={handleWatcherPointerUp}
+                className="flex items-center gap-2 px-4 py-2 border-b border-slate-900 bg-slate-950/50 cursor-grab active:cursor-grabbing select-none"
+              >
+                <TrendingUp className="w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                <span className="text-[10px] font-bold tracking-wider text-slate-400 font-mono pointer-events-none">VARIABLE WATCHER</span>
               </div>
-              <div className="flex-1 p-4 overflow-y-auto">
+              <div className="flex-1 p-3 overflow-y-auto">
                 {getInspectorVariables().length > 0 ? (
-                  <table className="w-full font-mono text-xs text-left">
+                  <table className="w-full font-mono text-[11px] text-left text-slate-300">
                     <thead>
                       <tr className="text-slate-500 border-b border-slate-900">
-                        <th className="pb-1.5 font-semibold">VAR</th>
-                        <th className="pb-1.5 font-semibold text-right">VALUE</th>
+                        <th className="pb-1 font-semibold">VAR</th>
+                        <th className="pb-1 font-semibold text-right">VALUE</th>
                       </tr>
                     </thead>
                     <tbody>
                       {getInspectorVariables().map(({ key, value, trend }) => (
                         <tr key={key} className="border-b border-slate-900/50 last:border-0 text-slate-300">
-                          <td className="py-1.5 text-indigo-400 font-bold">{key}</td>
-                          <td className="py-1.5 text-right font-semibold flex items-center justify-end gap-1.5">
+                          <td className="py-1 text-indigo-400 font-bold">{key}</td>
+                          <td className="py-1 text-right font-semibold flex items-center justify-end gap-1">
                             {value}
                             {trend === 'up' && (
-                              <ArrowUp className="w-3.5 h-3.5 text-emerald-400 animate-bounce" />
+                              <ArrowUp className="w-3 h-3 text-emerald-400 animate-bounce" />
                             )}
                             {trend === 'down' && (
-                              <ArrowDown className="w-3.5 h-3.5 text-rose-500 animate-bounce" />
+                              <ArrowDown className="w-3 h-3 text-rose-500 animate-bounce" />
                             )}
                           </td>
                         </tr>
@@ -661,8 +1075,8 @@ export default function App() {
                     </tbody>
                   </table>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-[10px] text-slate-600 font-mono text-center">
-                    No variables active in scope
+                  <div className="flex items-center justify-center h-full text-[9px] text-slate-600 font-mono text-center py-4">
+                    No active variables
                   </div>
                 )}
               </div>
