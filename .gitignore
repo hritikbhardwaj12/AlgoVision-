@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Production output
+dist/
+
+# Logs and system files
+*.log
+.DS_Store
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+
+# Local Vite/TypeScript cache
+.vite/
+.tsbuildinfo

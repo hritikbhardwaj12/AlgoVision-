@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "AlgoVision LeetCode Bridge",
+  "version": "1.0",
+  "description": "Bridges LeetCode editor code and testcases with the local AlgoVision visualizer panel.",
+  "permissions": [
+    "activeTab"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://leetcode.com/problems/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "AlgoVision Bridge"
+  }
+}
