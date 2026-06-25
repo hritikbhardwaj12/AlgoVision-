@@ -1,20 +1,35 @@
 let childWindow = null;
 let lastSentCode = "";
 
+const isInsideTestcase = (el) => {
+  return !!el.closest('[class*="testcase"], [class*="test-case"], [class*="console"], [id*="testcase"], [id*="test-case"], [id*="console"]');
+};
+
 function updateLeetCodeEditor(newCode) {
   // 1. Try Monaco Editor first if it's in the DOM
   if (document.querySelector('.monaco-editor') && window.monaco && window.monaco.editor) {
     const editors = window.monaco.editor.getEditors();
     if (editors && editors.length > 0) {
-      if (editors[0].getValue() !== newCode) {
-        editors[0].setValue(newCode);
+      for (const ed of editors) {
+        const domNode = ed.getDomNode();
+        if (domNode && domNode.getBoundingClientRect().height > 0 && !isInsideTestcase(domNode)) {
+          if (ed.getValue() !== newCode) {
+            ed.setValue(newCode);
+          }
+          return;
+        }
       }
-      return;
     }
   }
 
   // 2. Try CodeMirror 6 using layout height + keyword heuristics
   const cms = Array.from(document.querySelectorAll('.cm-content'))
+    .filter(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+      if (isInsideTestcase(el)) return false;
+      return true;
+    })
     .map(el => {
       const rect = el.getBoundingClientRect();
       const text = el.cmView && el.cmView.view ? el.cmView.view.state.doc.toString() : "";
@@ -72,12 +87,24 @@ function getLeetCodeCode() {
   if (document.querySelector('.monaco-editor') && window.monaco && window.monaco.editor) {
     const editors = window.monaco.editor.getEditors();
     if (editors && editors.length > 0) {
+      for (const ed of editors) {
+        const domNode = ed.getDomNode();
+        if (domNode && domNode.getBoundingClientRect().height > 0 && !isInsideTestcase(domNode)) {
+          return ed.getValue();
+        }
+      }
       return editors[0].getValue();
     }
   }
 
   // 2. Try CodeMirror 6 using layout height + keyword heuristics
   const cms = Array.from(document.querySelectorAll('.cm-content'))
+    .filter(el => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+      if (isInsideTestcase(el)) return false;
+      return true;
+    })
     .map(el => {
       const rect = el.getBoundingClientRect();
       const text = el.cmView && el.cmView.view ? el.cmView.view.state.doc.toString() : "";
@@ -111,6 +138,10 @@ function getLeetCodeCode() {
 // Add the message listener globally
 window.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'ALGOVISION_CODE_CHANGE') {
+    // Re-establish childWindow reference if it is lost due to page refresh
+    if (event.source && (!childWindow || childWindow.closed)) {
+      childWindow = event.source;
+    }
     lastSentCode = event.data.code; // Update instantly to prevent feedback sync-backs
     updateLeetCodeEditor(event.data.code);
   }
@@ -152,31 +183,33 @@ function injectBridge() {
     bottom: '24px',
     right: '24px',
     zIndex: '999999',
-    padding: '12px 20px',
-    background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+    padding: '10px 18px',
+    background: '#2db55d',
     color: '#ffffff',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    borderRadius: '16px',
+    border: 'none',
+    borderRadius: '8px',
     cursor: 'pointer',
-    fontFamily: '"Plus Jakarta Sans", sans-serif',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif',
     fontSize: '13px',
-    fontWeight: 'bold',
-    letterSpacing: '0.5px',
-    boxShadow: '0 10px 25px -5px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    fontWeight: '600',
+    letterSpacing: '0.2px',
+    boxShadow: '0 4px 12px rgba(45, 181, 93, 0.3)',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
     textDecoration: 'none',
     display: 'inline-block'
   });
 
   btn.addEventListener('mouseenter', () => {
-    btn.style.transform = 'translateY(-2px) scale(1.03)';
-    btn.style.boxShadow = '0 15px 30px -5px rgba(124, 58, 237, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+    btn.style.transform = 'translateY(-1px)';
+    btn.style.background = '#24904c';
+    btn.style.boxShadow = '0 6px 16px rgba(36, 144, 76, 0.4)';
     updateLinkHref();
   });
 
   btn.addEventListener('mouseleave', () => {
-    btn.style.transform = 'translateY(0) scale(1)';
-    btn.style.boxShadow = '0 10px 25px -5px rgba(124, 58, 237, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)';
+    btn.style.transform = 'translateY(0)';
+    btn.style.background = '#2db55d';
+    btn.style.boxShadow = '0 4px 12px rgba(45, 181, 93, 0.3)';
   });
 
   btn.addEventListener('mousedown', () => {

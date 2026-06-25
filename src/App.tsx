@@ -40,6 +40,10 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1000); // ms per step
   const [compileError, setCompileError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('algovision-theme');
+    return (saved === 'dark' || saved === 'light') ? saved : 'light';
+  });
 
   const [customTitle, setCustomTitle] = useState<string>('');
   const [isResizingHorizontally, setIsResizingHorizontally] = useState<boolean>(false);
@@ -118,9 +122,200 @@ export default function App() {
     };
   }, [currentStepIndex, steps, code]);
 
+  // const getActiveWindowSlice = () => {
+  //   const arrays = getDetectedArrays();
+  //   if (arrays.length === 0) return '[]';
+  //   const arr = arrays[0].values;
+  //   const l = currentStep?.state?.left ?? currentStep?.state?.windowStart ?? currentStep?.state?.i;
+  //   const r = currentStep?.state?.right ?? currentStep?.state?.windowEnd ?? currentStep?.state?.j ?? currentStep?.state?.r;
+  //   if (l !== undefined && r !== undefined) {
+  //     const lNum = Number(l);
+  //     const rNum = Number(r);
+  //     if (lNum <= rNum && rNum < arr.length) {
+  //       return `[${arr.slice(lNum, rNum + 1).join(' ')}]`;
+  //     }
+  //   }
+  //   return '[]';
+  // };
+
+  // const getCurrentSum = () => {
+  //   if (!currentStep) return '0';
+  //   const s = currentStep.state.sum ?? currentStep.state.val ?? currentStep.state.windowSum ?? currentStep.state.temp;
+  //   if (s !== undefined) return String(s);
+  //   return '0';
+  // };
+
+  const getMaxSum = () => {
+    if (!currentStep) return '0';
+    const m = currentStep.state.maxSum ?? currentStep.state.best ?? currentStep.state.ans ?? currentStep.state.result;
+    if (m !== undefined) return String(m);
+    return '0';
+  };
+
+  // const isMaxUpdated = () => {
+  //   if (!currentStep || currentStepIndex === 0 || !prevStep) return false;
+  //   const currMax = currentStep.state.maxSum !== undefined ? currentStep.state.maxSum : currentStep.state.best;
+  //   const prevMax = prevStep.state.maxSum !== undefined ? prevStep.state.maxSum : prevStep.state.best;
+  //   return currMax !== undefined && prevMax !== undefined && currMax > prevMax;
+  // };
+
+  // const getBestSubarrayWindow = () => {
+  //   let maxVal = -Infinity;
+  //   let bestL = -1;
+  //   let bestR = -1;
+  //   
+  //   for (let i = 0; i <= currentStepIndex; i++) {
+  //     const step = steps[i];
+  //     if (!step || !step.state) continue;
+  //      const m = step.state.maxSum ?? step.state.best ?? step.state.ans ?? step.state.result;
+  //     
+  //     if (m !== undefined && Number(m) > maxVal) {
+  //       maxVal = Number(m);
+  //       const l = step.state.left ?? step.state.windowStart ?? step.state.i;
+  //       const r = step.state.right ?? step.state.windowEnd ?? step.state.j ?? step.state.r;
+  //       if (l !== undefined && r !== undefined) {
+  //         bestL = Number(l);
+  //         bestR = Number(r);
+  //       }
+  //     }
+  //   }
+  //   
+  //   if (bestL !== -1 && bestR !== -1) {
+  //     return { left: bestL, right: bestR, val: maxVal };
+  //   }
+  //   return null;
+  // };
+
+  const getOutputIndices = (): number[] => {
+    if (!expectedOutput) return [];
+    try {
+      const trimmed = expectedOutput.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((x): x is number => typeof x === 'number');
+        }
+      }
+      const num = Number(trimmed);
+      if (!isNaN(num) && Number.isInteger(num)) {
+        return [num];
+      }
+    } catch (e) {}
+    return [];
+  };
+
+  const getDetectedMapsAndSets = () => {
+    if (!currentStep || !currentStep.state) return [];
+    const results: { name: string; type: 'map' | 'set'; values: any }[] = [];
+    for (const [key, val] of Object.entries(currentStep.state)) {
+      if (val instanceof Map) {
+        results.push({ name: key, type: 'map', values: val });
+      } else if (val instanceof Set) {
+        results.push({ name: key, type: 'set', values: val });
+      }
+    }
+    return results;
+  };
+
   const preset: AlgorithmPreset = PRESETS[activePresetId];
   const currentStep = steps[currentStepIndex] || null;
   const prevStep = currentStepIndex > 0 ? steps[currentStepIndex - 1] : null;
+
+  // Synthesize custom sound effects in real-time
+  const playSound = (type: 'tick' | 'pop' | 'ding' | 'click') => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      
+      if (type === 'tick') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(320, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.08);
+      } else if (type === 'pop') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(550, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+      } else if (type === 'ding') {
+        const playBellTone = (freq: number, gainVal: number, duration: number) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime);
+          gain.gain.setValueAtTime(gainVal, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.005, ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + duration);
+        };
+        playBellTone(950, 0.18, 0.4);
+        playBellTone(1900, 0.06, 0.22);
+      } else if (type === 'click') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1000, ctx.currentTime);
+        gain.gain.setValueAtTime(0.02, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.03);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.03);
+      }
+    } catch (e) {
+      console.warn("Failed to play synthesized sound effect:", e);
+    }
+  };
+
+  // Synchronized sound effects engine
+  useEffect(() => {
+    if (steps.length === 0 || !currentStep) return;
+    
+    // Play Click sound when explanation changes
+    playSound('click');
+
+    if (currentStepIndex > 0 && prevStep) {
+      const currMax = currentStep.state.maxSum !== undefined ? currentStep.state.maxSum : currentStep.state.best;
+      const prevMax = prevStep.state.maxSum !== undefined ? prevStep.state.maxSum : prevStep.state.best;
+      
+      if (currMax !== undefined && prevMax !== undefined && currMax > prevMax) {
+        playSound('ding');
+      } else {
+        const currPointers = ['left', 'right', 'mid', 'windowStart', 'windowEnd', 'i', 'j', 'r']
+          .map(p => currentStep.state[p])
+          .filter(v => v !== undefined);
+        const prevPointers = ['left', 'right', 'mid', 'windowStart', 'windowEnd', 'i', 'j', 'r']
+          .map(p => prevStep?.state[p])
+          .filter(v => v !== undefined);
+          
+        const pointersMoved = currPointers.some((val, idx) => val !== prevPointers[idx]);
+        if (pointersMoved) {
+          playSound('tick');
+        } else {
+          playSound('pop');
+        }
+      }
+    } else {
+      playSound('pop');
+    }
+  }, [currentStepIndex, steps]);
 
   // Initialize preset or load URL parameters from LeetCode Chrome Extension
   useEffect(() => {
@@ -147,12 +342,17 @@ export default function App() {
 
       if (parsedExamples.length > 0) {
         const first = parsedExamples[0];
-        setCustomInputs(first.variables || {});
+        const cleanedVars: Record<string, string> = {};
+        for (const [k, v] of Object.entries(first.variables || {})) {
+          const cleanKey = k.replace(/[^a-zA-Z0-9_]/g, '');
+          if (cleanKey) cleanedVars[cleanKey] = v as string;
+        }
+        setCustomInputs(cleanedVars);
         setExpectedOutput(first.output || '');
         setActiveExampleLabel(first.label);
         
         const evaluatedInputs: Record<string, any> = {};
-        for (const [k, v] of Object.entries(first.variables || {})) {
+        for (const [k, v] of Object.entries(cleanedVars)) {
           try {
             evaluatedInputs[k] = JSON.parse(v as string);
           } catch (e) {
@@ -197,6 +397,55 @@ export default function App() {
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
   }, []);
+
+  // Synchronize code and custom inputs with URL query parameters to persist changes on refresh
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let changed = false;
+
+    if (params.has('code') && code && params.get('code') !== code) {
+      params.set('code', code);
+      changed = true;
+    }
+
+    if (params.has('examples') && Object.keys(customInputs).length > 0) {
+      try {
+        const parsedExamples = JSON.parse(params.get('examples') || '[]');
+        if (parsedExamples.length > 0) {
+          const updatedExamples = [...parsedExamples];
+          // Find the active example by label or use the first one
+          const activeIdx = updatedExamples.findIndex(ex => ex.label === activeExampleLabel);
+          const targetIdx = activeIdx !== -1 ? activeIdx : 0;
+          
+          updatedExamples[targetIdx] = {
+            ...updatedExamples[targetIdx],
+            variables: customInputs
+          };
+          
+          const newExamplesStr = JSON.stringify(updatedExamples);
+          if (params.get('examples') !== newExamplesStr) {
+            params.set('examples', newExamplesStr);
+            changed = true;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (changed) {
+      const newRelativePathQuery = window.location.pathname + '?' + params.toString();
+      window.history.replaceState(null, '', newRelativePathQuery);
+    }
+  }, [code, customInputs, activeExampleLabel]);
+
+  // Periodically send code back to LeetCode parent tab to restore code if LeetCode page is refreshed
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (window.opener) {
+        window.opener.postMessage({ type: 'ALGOVISION_CODE_CHANGE', code }, '*');
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [code]);
 
   // Handle horizontal resize dragging
   useEffect(() => {
@@ -257,11 +506,13 @@ export default function App() {
       evaluatedInputs = inputsMap;
     } else {
       for (const [k, v] of Object.entries(customInputs)) {
+        const cleanKey = k.replace(/[^a-zA-Z0-9_]/g, '');
+        if (!cleanKey) continue;
         try {
-          evaluatedInputs[k] = JSON.parse(v);
+          evaluatedInputs[cleanKey] = JSON.parse(v);
         } catch (e) {
           const num = Number(v);
-          evaluatedInputs[k] = isNaN(num) ? v : num;
+          evaluatedInputs[cleanKey] = isNaN(num) ? v : num;
         }
       }
     }
@@ -271,9 +522,14 @@ export default function App() {
     if (traceResults.length > 0) {
       if (traceResults[0].explanation.startsWith("Syntax or Runtime Error:")) {
         setCompileError(traceResults[0].explanation);
-        setSteps([]);
+        setSteps([{
+          line: 1,
+          explanation: traceResults[0].explanation,
+          state: { ...evaluatedInputs }
+        }]);
         setCurrentStepIndex(0);
       } else {
+        setCompileError(null);
         setSteps(traceResults);
         setCurrentStepIndex(0);
       }
@@ -283,11 +539,16 @@ export default function App() {
   // Load a scraped testcase example
   const handleLoadExample = (ex: ScrapedExample) => {
     setActiveExampleLabel(ex.label);
-    setCustomInputs(ex.variables || {});
+    const cleanedVars: Record<string, string> = {};
+    for (const [k, v] of Object.entries(ex.variables || {})) {
+      const cleanKey = k.replace(/[^a-zA-Z0-9_]/g, '');
+      if (cleanKey) cleanedVars[cleanKey] = v as string;
+    }
+    setCustomInputs(cleanedVars);
     setExpectedOutput(ex.output || '');
     
     const evaluatedInputs: Record<string, any> = {};
-    for (const [k, v] of Object.entries(ex.variables || {})) {
+    for (const [k, v] of Object.entries(cleanedVars)) {
       try {
         evaluatedInputs[k] = JSON.parse(v as string);
       } catch (e) {
@@ -469,7 +730,7 @@ export default function App() {
     const pointers: Record<number, string[]> = {};
     
     // Ignore quantities, metrics, or benchmarks that represent answers instead of indices
-    const ignoreKeywords = ['target', 'sum', 'max', 'min', 'count', 'length', 'size', 'k', 'n', 'val', 'ans', 'result', 'temp'];
+    const ignoreKeywords = ['target', 'sum', 'max', 'min', 'count', 'length', 'size', 'k', 'n', 'val', 'ans', 'result', 'temp', 'complement', 'diff', 'difference', 'num', 'element', 'key', 'value', 'hash', 'code'];
 
     for (const [key, val] of Object.entries(currentStep.state)) {
       const isIgnored = ignoreKeywords.some(kw => key.toLowerCase().includes(kw));
@@ -542,9 +803,11 @@ export default function App() {
     const { state } = currentStep;
     const target = state.target;
     
+    const ignoreKeywords = ['target', 'sum', 'max', 'min', 'count', 'length', 'size', 'k', 'n', 'val', 'ans', 'result', 'temp', 'complement', 'diff', 'difference', 'num', 'element', 'key', 'value', 'hash', 'code'];
     const pointers: { name: string; val: number }[] = [];
     for (const [key, val] of Object.entries(state)) {
-      if (typeof val === 'number' && Number.isInteger(val) && key !== 'target' && key !== 'sum' && key !== 'maxSum' && key !== 'windowSum') {
+      const isIgnored = ignoreKeywords.some(kw => key.toLowerCase().includes(kw));
+      if (typeof val === 'number' && Number.isInteger(val) && !isIgnored) {
         pointers.push({ name: key, val });
       }
     }
@@ -579,9 +842,9 @@ export default function App() {
   const mathDetails = getActiveComparisonDetails();
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-100 font-sans">
+    <div className={`flex flex-col h-screen bg-bg-page text-text-main font-sans transition-colors duration-300 ${theme === 'dark' ? 'dark-theme' : ''}`}>
       {/* Branding HUD */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-slate-900 bg-slate-950/80 backdrop-blur-md">
+      <header className="flex items-center justify-between px-6 py-3.5 border-b border-border-main bg-bg-panel transition-colors duration-300">
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 shadow-lg shadow-indigo-500/20 animate-pulse">
             <Cpu className="w-5 h-5 text-white" />
@@ -596,14 +859,14 @@ export default function App() {
 
         {/* Preset Selectors or Problem Title */}
         {window.location.search.includes('code=') ? (
-          <div className="flex items-center gap-2 bg-indigo-950/40 border border-indigo-900/60 px-4 py-2.5 rounded-2xl">
+          <div className="flex items-center gap-2 bg-bg-inner border border-border-main px-4 py-2.5 rounded-2xl transition-colors duration-300">
             <Sparkles className="w-4 h-4 text-indigo-400 animate-pulse" />
             <span className="text-xs font-semibold font-mono tracking-wider text-indigo-300">
               {customTitle || 'Custom LeetCode Solution'}
             </span>
           </div>
         ) : (
-          <div className="flex items-center gap-2 bg-slate-900/60 border border-slate-800/80 p-1.5 rounded-2xl">
+          <div className="flex items-center gap-2 bg-bg-inner border border-border-main p-1.5 rounded-2xl transition-colors duration-300">
             {Object.values(PRESETS).map((p) => (
               <button
                 key={p.id}
@@ -620,12 +883,24 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          <span className="flex h-2 w-2 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-          </span>
-          <span className="text-xs font-semibold text-indigo-400 font-mono">COMPILER ACTIVE</span>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              const nextTheme = theme === 'light' ? 'dark' : 'light';
+              setTheme(nextTheme);
+              localStorage.setItem('algovision-theme', nextTheme);
+            }}
+            className="px-3 py-1.5 rounded-xl border border-border-main bg-bg-panel hover:bg-bg-inner text-text-main text-xs font-semibold font-mono tracking-wider transition-all duration-200 flex items-center gap-1.5 shadow-sm"
+          >
+            {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+          </button>
+          <div className="flex items-center gap-2 border-l border-border-main pl-4">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[10px] font-bold text-emerald-500 font-mono tracking-wider uppercase">COMPILER ACTIVE</span>
+          </div>
         </div>
       </header>
 
@@ -658,9 +933,9 @@ export default function App() {
 
             {/* Injected Examples chips if scraped */}
             {examples.length > 0 && (
-              <div className="flex flex-col gap-1.5 border-b border-slate-905 pb-3">
+              <div className="flex flex-col gap-1.5 border-b border-slate-900 pb-3">
                 <span className="text-[10px] font-mono text-slate-500 uppercase flex items-center gap-1">
-                  <BookOpen className="w-3.5 h-3.5" />
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
                   Scraped LeetCode Testcases:
                 </span>
                 <div className="flex gap-2">
@@ -670,8 +945,8 @@ export default function App() {
                       onClick={() => handleLoadExample(ex)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all duration-200 border ${
                         activeExampleLabel === ex.label
-                          ? 'bg-indigo-950 border-indigo-500 text-indigo-300 shadow shadow-indigo-500/10 font-bold'
-                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                          ? 'bg-indigo-950/60 border-indigo-500/80 text-indigo-300 shadow shadow-indigo-500/10 font-bold'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
                       }`}
                     >
                       {ex.label}
@@ -734,7 +1009,7 @@ export default function App() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-900 bg-slate-950/40">
               <span className="text-xs font-mono text-slate-400 flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-indigo-400" />
-                editable_solution.js
+                {code.includes('class ') || code.includes('public ') || code.includes('private ') || code.includes('ListNode') || code.includes('TreeNode') ? 'Solution.java' : 'solution.js'}
               </span>
               <span className="text-[10px] text-indigo-400 font-mono bg-indigo-950/40 border border-indigo-900/60 px-2 py-0.5 rounded-full">
                 CUSTOM CODE SUPPORT
@@ -744,7 +1019,7 @@ export default function App() {
               <Editor
                 height="100%"
                 language={code.includes('class ') || code.includes('public ') || code.includes('private ') || code.includes('ListNode') || code.includes('TreeNode') ? 'java' : 'javascript'}
-                theme="vs-dark"
+                theme={theme === 'dark' ? 'vs-dark' : 'vs'}
                 value={code}
                 onChange={(val) => {
                   const updated = val || '';
@@ -795,7 +1070,7 @@ export default function App() {
                 <Layers className="w-4 h-4 text-indigo-400" />
                 UNIVERSAL ALGORITHM ARRAY POINTER VISUALIZER
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className="text-xs text-slate-500 font-mono font-semibold">Timeline Step:</span>
                 <span className="text-xs font-bold font-mono text-indigo-400 bg-indigo-950/50 border border-indigo-900/60 px-2.5 py-0.5 rounded-full">
                   {steps.length > 0 ? `${currentStepIndex + 1} / ${steps.length}` : '0 / 0'}
@@ -819,215 +1094,300 @@ export default function App() {
                 }}
                 className="min-h-0"
               >
-                {/* Dynamic Math Banner */}
-                {mathDetails && (
-                  <div className={`px-4 py-1.5 rounded-xl border text-[11px] font-mono font-bold flex items-center gap-2 transition-all duration-300 transform scale-95 shadow-md ${
-                    mathDetails.match 
-                      ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300 shadow-emerald-500/10' 
-                      : 'bg-slate-900/90 border-slate-800 text-indigo-300'
-                  }`}>
-                    <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-950 text-slate-500 uppercase">COMPARING</span>
-                    <span>
-                      {mathDetails.arrayName}[{mathDetails.p1Name}] + {mathDetails.arrayName}[{mathDetails.p2Name}] ➜ ({mathDetails.valI}) + ({mathDetails.valJ}) = {mathDetails.sum}
-                    </span>
-                    <span>{mathDetails.match ? '===' : '!=='}</span>
-                    <span className={mathDetails.match ? 'text-emerald-400' : 'text-slate-500'}>
-                      target ({mathDetails.target})
-                    </span>
-                  </div>
-                )}
-
-                {currentStep && currentStep.state && detectedArrays.length > 0 ? (
-                  <div className="w-full flex flex-row flex-wrap gap-4 justify-center items-center py-1">
-                    
-                    {/* Map and render each detected array automatically */}
-                    {detectedArrays.map((arrayInfo, arrayIdx) => {
-                      const pointers = getPointersForArray(arrayInfo.values.length);
-                      const len = arrayInfo.values.length;
-                      
-                      // Dynamic sizing configurations based on number of items to prevent overflow/scrolling
-                      let boxSizeClass = 'w-11 h-12 text-sm rounded-xl';
-                      let badgeSizeClass = 'text-[9px] px-1 py-0.2';
-                      let spacingClass = 'gap-1.5';
-                      let containerGapClass = 'gap-1.5';
-                      let pointerContainerHeight = 'h-10';
-                      
-                      if (detectedArrays.length > 1) {
-                        boxSizeClass = 'w-9 h-10 text-xs rounded-lg';
-                        spacingClass = 'gap-1';
-                        containerGapClass = 'gap-1';
-                        pointerContainerHeight = 'h-8';
-                      }
-                      
-                      if (len > 8 && len <= 16) {
-                        boxSizeClass = 'w-8 h-9 text-xs rounded-lg';
-                        badgeSizeClass = 'text-[8px] px-0.8 py-0.2';
-                        spacingClass = 'gap-1';
-                        containerGapClass = 'gap-1';
-                        pointerContainerHeight = 'h-8';
-                      } else if (len > 16) {
-                        boxSizeClass = 'w-6 h-7 text-[10px] rounded-md';
-                        badgeSizeClass = 'text-[7px] px-0.5 py-0.1';
-                        spacingClass = 'gap-0.5';
-                        containerGapClass = 'gap-0.5';
-                        pointerContainerHeight = 'h-7';
-                      }
-                      
-                      // Dynamic sizing for 2D Grid
-                      let gridBoxSizeClass = 'w-9 h-9 rounded-xl text-sm';
-                      let gridGapClass = 'gap-1.5';
-                      let gridPaddingClass = 'p-3.5';
-                      let gridRowHeaderWidth = 'w-20';
-                      let gridLabelSizeClass = 'text-[9px]';
-                      
-                      if (arrayInfo.is2D) {
-                        const maxCols = Math.max(...arrayInfo.values.map(row => {
-                          const cells = typeof row === 'string' ? row.split('') : (Array.isArray(row) ? row : [row]);
-                          return cells.length;
-                        }), 0);
-                        const numRows = arrayInfo.values.length;
-                        
-                        if (numRows > 12 || maxCols > 24) {
-                          gridBoxSizeClass = 'w-5 h-5 rounded text-[8px]';
-                          gridGapClass = 'gap-0.5';
-                          gridPaddingClass = 'p-1.5';
-                          gridRowHeaderWidth = 'w-14';
-                          gridLabelSizeClass = 'text-[8px]';
-                        } else if (numRows > 6 || maxCols > 12) {
-                          gridBoxSizeClass = 'w-7 h-7 rounded-lg text-xs';
-                          gridGapClass = 'gap-1';
-                          gridPaddingClass = 'p-2.5';
-                          gridRowHeaderWidth = 'w-16';
-                          gridLabelSizeClass = 'text-[9px]';
-                        }
-                      }
-                      
-                      return (
-                        <div key={arrayIdx} className="flex flex-col items-center w-auto max-w-full flex-shrink-0 min-h-0 bg-slate-900/30 border border-slate-800/40 p-3 rounded-2xl shadow-sm">
-                          <div className="text-[10px] font-mono font-semibold text-indigo-400/90 uppercase tracking-wider mb-2 flex items-center gap-1.5 self-start px-1">
-                            <span className="w-1 h-1 rounded-full bg-indigo-500"></span>
-                            Array: {arrayInfo.name}
+                <>
+                    {/* Compile Error Banner */}
+                    {compileError && (
+                      <div className="w-full max-w-xl px-4 py-3 rounded-2xl border border-rose-950/80 bg-rose-950/45 text-rose-300 font-mono text-xs flex items-start gap-3 shadow-lg shadow-rose-950/20 backdrop-blur-md transition-all duration-300">
+                        <Terminal className="w-4 h-4 text-rose-400 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-[10px] text-rose-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
+                            Syntax or Runtime Error
                           </div>
-                          
-                          {arrayInfo.is2D ? (
-                            <div className={`flex flex-col ${gridGapClass} bg-slate-950/40 border border-slate-900 ${gridPaddingClass} rounded-2xl w-full max-w-2xl overflow-hidden shadow-inner`}>
-                              {arrayInfo.values.map((row, rIdx) => {
-                                const cells = typeof row === 'string' ? row.split('') : (Array.isArray(row) ? row : [row]);
-                                
-                                // Check if any pointers in the state match this row index
-                                const rowPointers: string[] = [];
-                                if (currentStep && currentStep.state) {
-                                  for (const [k, v] of Object.entries(currentStep.state)) {
-                                    if (typeof v === 'number' && v === rIdx && (k.toLowerCase().includes('row') || k === 'r' || k === 'currow' || k === 'rowidx' || k === 'i')) {
-                                      rowPointers.push(k);
-                                    }
-                                  }
-                                }
+                          <div className="leading-relaxed break-words text-rose-200">
+                            {compileError.startsWith("Syntax or Runtime Error: ") ? compileError.slice("Syntax or Runtime Error: ".length) : compileError}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                                return (
-                                  <div key={rIdx} className={`flex items-center ${gridGapClass} w-full`}>
-                                    <div className={`flex items-center gap-1 ${gridRowHeaderWidth} flex-shrink-0 justify-end`}>
-                                      {rowPointers.map(rp => (
-                                        <span key={rp} className="px-1.5 py-0.5 rounded text-[8px] font-bold font-mono bg-indigo-950 border border-indigo-900/60 text-indigo-400 animate-pulse">
-                                          {rp}
+                    {/* Dynamic Math Banner */}
+                    {mathDetails && (
+                      <div className={`px-4 py-1.5 rounded-xl border text-[11px] font-mono font-bold flex items-center gap-2 transition-all duration-300 transform scale-95 shadow-md ${
+                        mathDetails.match 
+                          ? 'bg-emerald-950/60 border-emerald-500/80 text-emerald-300 shadow-emerald-500/10' 
+                          : 'bg-slate-900/90 border-slate-800 text-indigo-300'
+                      }`}>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-950 text-slate-500 uppercase">COMPARING</span>
+                        <span>
+                          {mathDetails.arrayName}[{mathDetails.p1Name}] + {mathDetails.arrayName}[{mathDetails.p2Name}] ➜ ({mathDetails.valI}) + ({mathDetails.valJ}) = {mathDetails.sum}
+                        </span>
+                        <span>{mathDetails.match ? '===' : '!=='}</span>
+                        <span className={mathDetails.match ? 'text-emerald-400' : 'text-slate-500'}>
+                          target ({mathDetails.target})
+                        </span>
+                      </div>
+                    )}
+
+                    {currentStep && currentStep.state && detectedArrays.length > 0 ? (
+                      <>
+                        <div className="w-full flex flex-row flex-wrap gap-4 justify-center items-center py-1">
+                        
+                        {/* Map and render each detected array automatically */}
+                        {detectedArrays.map((arrayInfo, arrayIdx) => {
+                          const pointers = getPointersForArray(arrayInfo.values.length);
+                          const len = arrayInfo.values.length;
+                          
+                          // Dynamic sizing configurations based on number of items to prevent overflow/scrolling
+                          let boxSizeClass = 'w-11 h-12 text-sm rounded-xl';
+                          let badgeSizeClass = 'text-[9px] px-1 py-0.2';
+                          let spacingClass = 'gap-1.5';
+                          let containerGapClass = 'gap-1.5';
+                          let pointerContainerHeight = 'h-10';
+                          
+                          if (detectedArrays.length > 1) {
+                            boxSizeClass = 'w-9 h-10 text-xs rounded-lg';
+                            spacingClass = 'gap-1';
+                            containerGapClass = 'gap-1';
+                            pointerContainerHeight = 'h-8';
+                          }
+                          
+                          if (len > 8 && len <= 16) {
+                            boxSizeClass = 'w-8 h-9 text-xs rounded-lg';
+                            badgeSizeClass = 'text-[8px] px-0.8 py-0.2';
+                            spacingClass = 'gap-1';
+                            containerGapClass = 'gap-1';
+                            pointerContainerHeight = 'h-8';
+                          } else if (len > 16) {
+                            boxSizeClass = 'w-6 h-7 text-[10px] rounded-md';
+                            badgeSizeClass = 'text-[7px] px-0.5 py-0.1';
+                            spacingClass = 'gap-0.5';
+                            containerGapClass = 'gap-0.5';
+                            pointerContainerHeight = 'h-7';
+                          }
+                          
+                          // Dynamic sizing for 2D Grid
+                          let gridBoxSizeClass = 'w-9 h-9 rounded-xl text-sm';
+                          let gridGapClass = 'gap-1.5';
+                          let gridPaddingClass = 'p-3.5';
+                          let gridRowHeaderWidth = 'w-20';
+                          let gridLabelSizeClass = 'text-[9px]';
+                          
+                          if (arrayInfo.is2D) {
+                            const maxCols = Math.max(...arrayInfo.values.map(row => {
+                              const cells = typeof row === 'string' ? row.split('') : (Array.isArray(row) ? row : [row]);
+                              return cells.length;
+                            }), 0);
+                            const numRows = arrayInfo.values.length;
+                            
+                            if (numRows > 12 || maxCols > 24) {
+                              gridBoxSizeClass = 'w-5 h-5 rounded text-[8px]';
+                              gridGapClass = 'gap-0.5';
+                              gridPaddingClass = 'p-1.5';
+                              gridRowHeaderWidth = 'w-14';
+                              gridLabelSizeClass = 'text-[8px]';
+                            } else if (numRows > 6 || maxCols > 12) {
+                              gridBoxSizeClass = 'w-7 h-7 rounded-lg text-xs';
+                              gridGapClass = 'gap-1';
+                              gridPaddingClass = 'p-2.5';
+                              gridRowHeaderWidth = 'w-16';
+                              gridLabelSizeClass = 'text-[9px]';
+                            }
+                          }
+                          
+                          return (
+                            <div key={arrayIdx} className="flex flex-col items-center w-auto max-w-full flex-shrink-0 min-h-0 bg-slate-900/30 border border-slate-800/40 p-3 rounded-2xl shadow-sm">
+                              <div className="text-[10px] font-mono font-semibold text-indigo-400/90 uppercase tracking-wider mb-2 flex items-center gap-1.5 self-start px-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                Array: {arrayInfo.name}
+                              </div>
+                              
+                              {arrayInfo.is2D ? (
+                                <div className={`flex flex-col ${gridGapClass} bg-slate-950/40 border border-slate-900 ${gridPaddingClass} rounded-2xl w-full max-w-2xl overflow-hidden shadow-inner`}>
+                                  {arrayInfo.values.map((row, rIdx) => {
+                                    const cells = typeof row === 'string' ? row.split('') : (Array.isArray(row) ? row : [row]);
+                                    
+                                    // Check if any pointers in the state match this row index
+                                    const rowPointers: string[] = [];
+                                    if (currentStep && currentStep.state) {
+                                      for (const [k, v] of Object.entries(currentStep.state)) {
+                                        if (typeof v === 'number' && v === rIdx && (k.toLowerCase().includes('row') || k === 'r' || k === 'currow' || k === 'rowidx' || k === 'i')) {
+                                          rowPointers.push(k);
+                                        }
+                                      }
+                                    }
+
+                                    return (
+                                      <div key={rIdx} className={`flex items-center ${gridGapClass} w-full`}>
+                                        <div className={`flex items-center gap-1 ${gridRowHeaderWidth} flex-shrink-0 justify-end`}>
+                                          {rowPointers.map(rp => (
+                                            <span key={rp} className="px-1.5 py-0.5 rounded text-[8px] font-bold font-mono bg-indigo-950 border border-indigo-900/60 text-indigo-400 animate-pulse">
+                                              {rp}
+                                            </span>
+                                          ))}
+                                          <span className={`${gridLabelSizeClass} text-slate-500 font-mono`}>Row {rIdx}:</span>
+                                        </div>
+                                        <div className={`flex ${gridGapClass}`}>
+                                          {cells.map((cell, cIdx) => (
+                                            <div 
+                                              key={cIdx} 
+                                              className={`${gridBoxSizeClass} border border-slate-800 bg-slate-900/60 flex items-center justify-center font-bold font-mono text-indigo-300 shadow transition-all duration-300 hover:border-indigo-500/50`}
+                                            >
+                                              {cell}
+                                            </div>
+                                          ))}
+                                          {cells.length === 0 && (
+                                            <span className={`${gridLabelSizeClass} text-slate-700 italic font-mono flex items-center`}>empty</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className={`flex items-center ${containerGapClass} w-full justify-center relative flex-nowrap py-1 overflow-x-auto overflow-y-hidden`}>
+                                  {arrayInfo.values.map((val, idx) => {
+                                    const isOutput = currentStepIndex === steps.length - 1 && getOutputIndices().includes(idx);
+                                    const activePointers = pointers[idx] || [];
+                                    const isBeingPointed = activePointers.length > 0;
+                                    const isLinkedList = code.includes('ListNode') || arrayInfo.name.toLowerCase().startsWith('l') || arrayInfo.name.toLowerCase().includes('list');
+
+                                    let boxClass = 'bg-slate-900 border-slate-800 text-slate-300';
+                                    if (isOutput) {
+                                      boxClass = 'bg-emerald-950/60 border-emerald-500 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.8)] border-2 animate-bounce';
+                                    } else if (isBeingPointed) {
+                                      if (activePointers.includes('mid')) {
+                                        boxClass = 'bg-yellow-950/40 border-yellow-500 text-yellow-300 shadow-md shadow-yellow-500/10';
+                                      } else if (activePointers.some(p => p === 'j' || p === 'right' || p === 'end' || p === 'high')) {
+                                        boxClass = 'bg-rose-950/40 border-rose-500 text-rose-300 shadow-md shadow-rose-500/10';
+                                      } else if (activePointers.some(p => p === 'i' || p === 'left' || p === 'start' || p === 'low')) {
+                                        boxClass = 'bg-indigo-950/40 border-indigo-500 text-indigo-200 shadow-md shadow-indigo-500/10';
+                                      } else {
+                                        boxClass = 'bg-violet-950/40 border-violet-500 text-violet-305 shadow-md shadow-violet-500/10';
+                                      }
+                                    }
+
+                                    return (
+                                      <div key={idx} className="flex items-center gap-1 flex-shrink-0">
+                                        <div className={`flex flex-col items-center ${spacingClass}`}>
+                                          <span className="text-[9px] text-slate-500 font-mono">[{idx}]</span>
+                                          
+                                          <div className={`${boxSizeClass} border flex items-center justify-center font-bold font-mono transition-all duration-300 ${boxClass}`}>
+                                            {val}
+                                          </div>
+
+                                          {/* Dynamically list all pointer badges below this index */}
+                                          <div className={`${pointerContainerHeight} flex flex-col items-center justify-start gap-0.5`}>
+                                            {activePointers.map((pName) => {
+                                              let badgeColor = 'bg-violet-950 border-violet-800 text-violet-400';
+                                              if (pName === 'i' || pName === 'left' || pName === 'start' || pName === 'low') {
+                                                badgeColor = 'bg-indigo-950 border-indigo-800 text-indigo-300';
+                                              } else if (pName === 'j' || pName === 'right' || pName === 'end' || pName === 'high') {
+                                                badgeColor = 'bg-rose-950 border-rose-850 text-rose-400';
+                                              } else if (pName === 'mid') {
+                                                badgeColor = 'bg-yellow-950 border-yellow-800 text-yellow-400';
+                                              }
+                                              
+                                              return (
+                                                <span key={pName} className={`rounded font-bold font-mono shadow-sm ${badgeSizeClass} ${badgeColor}`}>
+                                                  {pName}
+                                                </span>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                        {isLinkedList && idx < arrayInfo.values.length - 1 && (
+                                          <div className="text-indigo-500 font-black text-xs pb-8 animate-pulse">➜</div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Dynamic Map & Set Visualizer */}
+                      {getDetectedMapsAndSets().length > 0 && (
+                        <div className="flex flex-wrap gap-6 justify-center items-stretch mt-2 mb-4 w-full px-4">
+                          {getDetectedMapsAndSets().map((item, idx) => (
+                            <div key={idx} className="bg-slate-900/35 border border-slate-800/50 rounded-2xl p-4 flex flex-col min-w-[240px] max-w-sm shadow-md">
+                              <div className="text-[10px] font-mono font-semibold text-indigo-400/90 uppercase tracking-wider mb-3 flex items-center gap-1.5 border-b border-slate-805 pb-2">
+                                <span className="w-1.5 h-1.5 rounded-full bg-violet-500"></span>
+                                {item.type === 'map' ? 'Hash Map' : 'Hash Set'}: {item.name}
+                              </div>
+                              
+                              <div className="flex-1 flex flex-col gap-2.5 overflow-y-auto max-h-[140px] pr-1 font-mono text-xs">
+                                {item.type === 'map' ? (
+                                  (Array.from(item.values.entries()) as [any, any][]).length > 0 ? (
+                                    (Array.from(item.values.entries()) as [any, any][]).map(([k, v], entryIdx) => (
+                                      <div key={entryIdx} className="flex items-center justify-between bg-slate-950/60 border border-slate-900 px-3 py-2 rounded-xl transition-all duration-300 hover:border-violet-500/30">
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[9px] text-slate-500 uppercase tracking-wider scale-90">key</span>
+                                          <span className="bg-violet-950/80 border border-violet-850 text-violet-350 font-bold px-2 py-0.5 rounded-lg">{String(k)}</span>
+                                        </div>
+                                        <div className="text-slate-650 font-bold">➜</div>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="bg-cyan-950/80 border border-cyan-850 text-cyan-350 font-bold px-2 py-0.5 rounded-lg">{String(v)}</span>
+                                          <span className="text-[9px] text-slate-500 uppercase tracking-wider scale-90">val</span>
+                                        </div>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <div className="text-[10px] text-slate-600 italic text-center py-4">Map is empty</div>
+                                  )
+                                ) : (
+                                  Array.from(item.values).length > 0 ? (
+                                    <div className="flex flex-wrap gap-2 py-1 justify-center">
+                                      {Array.from(item.values).map((setVal, setValIdx) => (
+                                        <span key={setValIdx} className="bg-violet-950/60 border border-violet-900/60 text-violet-300 px-2.5 py-1 rounded-xl shadow-inner font-bold hover:border-violet-500/40 transition-colors">
+                                          {String(setVal)}
                                         </span>
                                       ))}
-                                      <span className={`${gridLabelSizeClass} text-slate-500 font-mono`}>Row {rIdx}:</span>
                                     </div>
-                                    <div className={`flex ${gridGapClass}`}>
-                                      {cells.map((cell, cIdx) => (
-                                        <div 
-                                          key={cIdx} 
-                                          className={`${gridBoxSizeClass} border border-slate-800 bg-slate-900/60 flex items-center justify-center font-bold font-mono text-indigo-300 shadow transition-all duration-300 hover:border-indigo-500/50`}
-                                        >
-                                          {cell}
-                                        </div>
-                                      ))}
-                                      {cells.length === 0 && (
-                                        <span className={`${gridLabelSizeClass} text-slate-700 italic font-mono flex items-center`}>empty</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                                  ) : (
+                                    <div className="text-[10px] text-slate-600 italic text-center py-4">Set is empty</div>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Desktop Explanation Section */}
+                      <div className="h-12 flex items-center justify-center overflow-hidden my-2.5 w-full flex-shrink-0">
+                        {currentStep && (
+                          currentStepIndex === steps.length - 1 ? (
+                            <div className="text-xs font-bold font-mono text-center text-emerald-400 uppercase tracking-wider animate-pulse border border-emerald-500/50 bg-emerald-950/40 px-5 py-2 rounded-xl shadow-lg shadow-emerald-500/10">
+                              🎉 SUCCESS: {getMaxSum() !== '0' ? `MAX SUM = ${getMaxSum()}` : `OUTPUT = ${expectedOutput || 'SOLVED'}`}
                             </div>
                           ) : (
-                            <div className={`flex items-center ${containerGapClass} w-full justify-center relative flex-nowrap py-1 overflow-x-auto overflow-y-hidden`}>
-                              {arrayInfo.values.map((val, idx) => {
-                                const activePointers = pointers[idx] || [];
-                                const isBeingPointed = activePointers.length > 0;
-                                const isMid = activePointers.includes('mid');
-                                const isLinkedList = code.includes('ListNode') || arrayInfo.name.toLowerCase().startsWith('l') || arrayInfo.name.toLowerCase().includes('list');
-
-                                let boxClass = 'bg-slate-900 border-slate-800 text-slate-300';
-                                if (isMid) {
-                                  boxClass = 'bg-yellow-950/40 border-yellow-500 text-yellow-300 shadow-md shadow-yellow-500/10';
-                                } else if (isBeingPointed) {
-                                  boxClass = 'bg-indigo-950/40 border-indigo-500 text-indigo-200 shadow-md shadow-indigo-500/10';
-                                }
-
-                                return (
-                                  <div key={idx} className="flex items-center gap-1 flex-shrink-0">
-                                    <div className={`flex flex-col items-center ${spacingClass}`}>
-                                      <span className="text-[9px] text-slate-500 font-mono">[{idx}]</span>
-                                      
-                                      <div className={`${boxSizeClass} border flex items-center justify-center font-bold font-mono transition-all duration-300 ${boxClass}`}>
-                                        {val}
-                                      </div>
-
-                                      {/* Dynamically list all pointer badges below this index */}
-                                      <div className={`${pointerContainerHeight} flex flex-col items-center justify-start gap-0.5`}>
-                                        {activePointers.map((pName) => {
-                                          let badgeColor = 'bg-violet-950 border-violet-850 text-violet-400';
-                                          if (pName === 'left' || pName === 'start' || pName === 'low') {
-                                            badgeColor = 'bg-emerald-950 border-emerald-800 text-emerald-400';
-                                          } else if (pName === 'right' || pName === 'end' || pName === 'high') {
-                                            badgeColor = 'bg-red-950 border-red-800 text-red-400';
-                                          } else if (pName === 'mid') {
-                                            badgeColor = 'bg-yellow-950 border-yellow-800 text-yellow-400';
-                                          }
-                                          
-                                          return (
-                                            <span key={pName} className={`rounded font-bold font-mono shadow-sm ${badgeSizeClass} ${badgeColor}`}>
-                                              {pName}
-                                            </span>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                    {isLinkedList && idx < arrayInfo.values.length - 1 && (
-                                      <div className="text-indigo-500 font-black text-xs pb-8 animate-pulse">➜</div>
-                                    )}
-                                  </div>
-                                );
-                              })}
+                            <div
+                              key={currentStepIndex}
+                              className="animate-explanation-floating text-xs font-mono text-center text-indigo-300 bg-indigo-950/40 border border-indigo-900/60 px-5 py-2 rounded-xl shadow-lg shadow-indigo-950/20 backdrop-blur-sm max-w-[90%]"
+                            >
+                              {currentStep.explanation}
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center text-center max-w-sm gap-3">
-                    {compileError ? (
-                      <>
-                        <div className="w-12 h-12 rounded-full bg-rose-950/50 border border-rose-800 flex items-center justify-center text-rose-400">
-                          <Terminal className="w-5 h-5" />
-                        </div>
-                        <p className="text-sm font-mono text-rose-400 font-semibold leading-relaxed">
-                          {compileError}
-                        </p>
+                          )
+                        )}
+                      </div>
                       </>
                     ) : (
-                      <>
-                        <HelpCircle className="w-12 h-12 text-slate-700" />
-                        <p className="text-sm font-mono text-slate-500 leading-relaxed">
-                          Write code, define arguments, and click the Compile button to generate a dynamic execution sequence!
-                        </p>
-                      </>
+                      <div className="flex flex-col items-center text-center max-w-sm gap-3">
+                        {!compileError && (
+                          <>
+                            <HelpCircle className="w-12 h-12 text-slate-700" />
+                            <p className="text-sm font-mono text-slate-500 leading-relaxed">
+                              Write code, define arguments, and click the Compile button to generate a dynamic execution sequence!
+                            </p>
+                          </>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
+                  </>
               </div>
             </div>
 

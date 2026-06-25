@@ -276,6 +276,16 @@ function generateExplanation(current: any, prev: any, array: any[]): string {
  * Runs user code in a safe local environment and yields structural animation frames.
  */
 export function runCustomTrace(code: string, inputs: Record<string, any>): DynamicStep[] {
+  // Sanitize input keys to be valid JS identifiers (e.g. "(nums)" -> "nums")
+  const sanitizedInputs: Record<string, any> = {};
+  for (const [key, val] of Object.entries(inputs)) {
+    const cleanKey = key.replace(/[^a-zA-Z0-9_]/g, '');
+    if (cleanKey) {
+      sanitizedInputs[cleanKey] = val;
+    }
+  }
+  inputs = sanitizedInputs;
+
   // Normalize non-breaking spaces (\u00A0) to standard spaces to prevent compilation syntax errors
   const normalizedCode = code.replace(/\u00A0/g, ' ');
   let compilableJS = normalizedCode;
