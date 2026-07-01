@@ -1055,7 +1055,7 @@ export default function App() {
                   3
                 </div>
                 <p className="text-xs text-slate-300">
-                  Restart Chrome, and click <strong>Enable Extension</strong> on the popup prompt!
+                  Restart your browser (Brave, Edge, or Chrome), and click <strong>Enable Extension</strong> on the popup prompt!
                 </p>
               </div>
             </div>

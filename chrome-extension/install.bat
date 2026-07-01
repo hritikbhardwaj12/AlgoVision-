@@ -16,9 +16,12 @@ echo Copying extension files to %TARGET_DIR%...
 xcopy /E /Y /I "%~dp0*" "%TARGET_DIR%" >nul
 del "%TARGET_DIR%\install.bat" >nul 2>&1
 
-:: Register extension in Chrome Registry
-echo Registering extension in Google Chrome registry...
+:: Register extension in Chrome, Edge, and Brave Registry
+echo Registering extension in Google Chrome, Microsoft Edge, and Brave registry...
 reg add "HKCU\Software\Google\Chrome\Extensions\hgabpjkbbnheeonceoplchffpiiofkbn" /v "path" /t REG_SZ /d "%TARGET_DIR%" /f >nul
+reg add "HKCU\Software\Microsoft\Edge\Extensions\hgabpjkbbnheeonceoplchffpiiofkbn" /v "path" /t REG_SZ /d "%TARGET_DIR%" /f >nul
+reg add "HKCU\Software\BraveSoftware\Brave-Browser\Extensions\hgabpjkbbnheeonceoplchffpiiofkbn" /v "path" /t REG_SZ /d "%TARGET_DIR%" /f >nul
+reg add "HKCU\Software\Brave-Browser\Extensions\hgabpjkbbnheeonceoplchffpiiofkbn" /v "path" /t REG_SZ /d "%TARGET_DIR%" /f >nul
 
 if %errorlevel% neq 0 (
     echo [ERROR] Failed to write to Windows Registry. Please run this script as Administrator if it persists.
@@ -30,8 +33,8 @@ echo.
 echo ======================================================
 echo    SUCCESS: AlgoVision Extension registered!
 echo.
-echo    1. Restart Google Chrome if it's currently open.
-echo    2. Chrome will prompt you: "New extension added" 
+echo    1. Restart your browser (Chrome, Edge, or Brave) if it's open.
+echo    2. Your browser will prompt you: "New extension added" 
 echo       with a button to "Enable extension".
 echo ======================================================
 echo.
