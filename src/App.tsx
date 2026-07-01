@@ -1028,7 +1028,7 @@ export default function App() {
           {/* Steps */}
           <div className="flex flex-col gap-4">
             <h3 className="text-xs font-semibold text-slate-400 tracking-wider uppercase font-mono">
-              🔧 Setup Instructions (Takes 1 Minute)
+              🔧 Setup Instructions (Takes 10 Seconds)
             </h3>
             
             <div className="flex flex-col gap-4">
@@ -1046,7 +1046,7 @@ export default function App() {
                   2
                 </div>
                 <p className="text-xs text-slate-300">
-                  Open Google Chrome and go to: <span className="text-indigo-400 font-mono">chrome://extensions/</span>
+                  Double-click the <code className="text-indigo-300 bg-slate-900 px-1 py-0.5 rounded font-mono">install.bat</code> script inside the extracted folder.
                 </p>
               </div>
 
@@ -1055,7 +1055,7 @@ export default function App() {
                   3
                 </div>
                 <p className="text-xs text-slate-300">
-                  Turn on <strong>Developer Mode</strong> (top-right toggle), click <strong>Load unpacked</strong> (top-left button), and select the extracted folder.
+                  Restart Chrome, and click <strong>Enable Extension</strong> on the popup prompt!
                 </p>
               </div>
             </div>
