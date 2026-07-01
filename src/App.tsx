@@ -28,6 +28,83 @@ interface ScrapedExample {
 }
 
 export default function App() {
+  const [user, setUser] = useState<{ name: string; email: string; picture: string } | null>(() => {
+    const saved = localStorage.getItem('algovision-user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    const completed = localStorage.getItem('algovision-onboarding-completed');
+    return !completed;
+  });
+
+  const handleGoogleLoginSuccess = async (response: any) => {
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ credential: response.credential }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('algovision-user', JSON.stringify(data.user));
+        setUser(data.user);
+        
+        // No automatic redirect to LeetCode on login success, let the user stay on AlgoVision dashboard
+      } else {
+        alert('Login failed: ' + (data.message || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Error during backend verification:', err);
+      alert('Authentication error. Please try again.');
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('algovision-user');
+    localStorage.removeItem('algovision-onboarding-completed');
+    setUser(null);
+    setShowOnboarding(true);
+  };
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('source') === 'extension') {
+      localStorage.setItem('algovision-onboarding-completed', 'true');
+      setShowOnboarding(false);
+    }
+  }, []);
+
+  // No automatic redirect to LeetCode for authenticated users on app load
+
+  useEffect(() => {
+    if (!user) {
+      const initializeGoogleSignIn = () => {
+        if ((window as any).google?.accounts?.id) {
+          (window as any).google.accounts.id.initialize({
+            client_id: (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || '822067756858-jepk0hndm365s664q3j4g7p4r97e1ld5.apps.googleusercontent.com',
+            callback: handleGoogleLoginSuccess,
+          });
+          
+          const btnDiv = document.getElementById('google-signin-btn');
+          if (btnDiv) {
+            (window as any).google.accounts.id.renderButton(
+              btnDiv,
+              { theme: 'filled_blue', size: 'large', width: '320' }
+            );
+          }
+          (window as any).google.accounts.id.prompt();
+        } else {
+          setTimeout(initializeGoogleSignIn, 100);
+        }
+      };
+      
+      initializeGoogleSignIn();
+    }
+  }, [user]);
+
   const [activePresetId, setActivePresetId] = useState<string>('twoSum');
   const [code, setCode] = useState<string>('');
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
@@ -40,10 +117,7 @@ export default function App() {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1000); // ms per step
   const [compileError, setCompileError] = useState<string | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('algovision-theme');
-    return (saved === 'dark' || saved === 'light') ? saved : 'light';
-  });
+  const theme = 'dark';
 
   const [customTitle, setCustomTitle] = useState<string>('');
   const [isResizingHorizontally, setIsResizingHorizontally] = useState<boolean>(false);
@@ -841,6 +915,171 @@ export default function App() {
 
   const mathDetails = getActiveComparisonDetails();
 
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-100 font-sans p-6 overflow-y-auto w-full">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/30 via-slate-950 to-slate-950 -z-10" />
+        
+        <div className="w-full max-w-lg bg-slate-900/60 border border-slate-800/80 rounded-3xl p-8 backdrop-blur-xl shadow-2xl flex flex-col gap-8">
+          
+          {/* Logo & Header */}
+          <div className="flex flex-col items-center text-center gap-3">
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-violet-600 shadow-xl shadow-indigo-500/20 animate-pulse">
+              <Cpu className="w-7 h-7 text-white" />
+            </div>
+            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-sky-200 to-white bg-clip-text text-transparent">
+              AlgoVision Studio
+            </h1>
+            <p className="text-sm text-slate-400 max-w-sm">
+              The premium AI-powered algorithm visualizer that runs right on your LeetCode screen.
+            </p>
+          </div>
+
+          {/* Call to Action: Sign Up / Sign In */}
+          <div className="flex flex-col items-center gap-4">
+            <div id="google-signin-btn" className="pulsing-glow rounded-lg overflow-hidden" />
+            <p className="text-xs text-slate-500">
+              By logging in, you agree to optimize your learning journey.
+            </p>
+          </div>
+
+          {/* Setup Instructions */}
+          <div className="border-t border-slate-800/80 pt-6 flex flex-col gap-4">
+            <h3 className="text-xs font-semibold text-slate-400 tracking-wider uppercase font-mono">
+              🚀 Getting Started
+            </h3>
+            
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-3">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-mono font-bold text-indigo-400 flex-shrink-0">
+                  1
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-200">Sign Up / Sign In</h4>
+                  <p className="text-xs text-slate-400">Log in with your Google account above to create your profile.</p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-mono font-bold text-indigo-400 flex-shrink-0">
+                  2
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-200">Load the Chrome Extension</h4>
+                  <p className="text-xs text-slate-400">
+                    Add the AlgoVision Chrome extension to bridge LeetCode with the visualizer.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-mono font-bold text-indigo-400 flex-shrink-0">
+                  3
+                </div>
+                <div>
+                  <h4 className="text-sm font-medium text-slate-200">Visualize Live on LeetCode</h4>
+                  <p className="text-xs text-slate-400">
+                    Visit any LeetCode problem. Click "Visualize Code" to watch execution steps interactively.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    );
+  }
+
+  if (user && showOnboarding) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-slate-950 text-slate-100 font-sans p-6 overflow-y-auto w-full">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-indigo-900/30 via-slate-950 to-slate-950 -z-10" />
+        
+        <div className="w-full max-w-xl bg-slate-900/60 border border-slate-800/80 rounded-3xl p-8 backdrop-blur-xl shadow-2xl flex flex-col gap-6">
+          
+          <div className="flex flex-col items-center text-center gap-3">
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-500 shadow-xl shadow-emerald-500/20">
+              <Sparkles className="w-7 h-7 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Welcome to AlgoVision Studio, {user.name}!
+            </h1>
+            <p className="text-sm text-slate-400 max-w-md">
+              You are signed up! To start visualizing your solutions, please add the companion Chrome Extension.
+            </p>
+          </div>
+
+          {/* Download Box */}
+          <div className="bg-slate-950/60 border border-slate-800/80 p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex flex-col gap-1 text-center sm:text-left">
+              <h4 className="text-sm font-semibold text-slate-200">AlgoVision Extension Package</h4>
+              <p className="text-xs text-slate-400">Zip archive containing the Chrome Extension bridge files.</p>
+            </div>
+            <a 
+              href="/chrome-extension.zip" 
+              download="chrome-extension.zip"
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-md transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer text-decoration-none"
+            >
+              📥 Download Extension (.zip)
+            </a>
+          </div>
+
+          {/* Steps */}
+          <div className="flex flex-col gap-4">
+            <h3 className="text-xs font-semibold text-slate-400 tracking-wider uppercase font-mono">
+              🔧 Setup Instructions (Takes 1 Minute)
+            </h3>
+            
+            <div className="flex flex-col gap-4">
+              <div className="flex gap-3">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-mono font-bold text-indigo-400 flex-shrink-0">
+                  1
+                </div>
+                <p className="text-xs text-slate-300">
+                  Extract the downloaded <code className="text-indigo-300 bg-slate-900 px-1 py-0.5 rounded font-mono">chrome-extension.zip</code> file onto your computer.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-mono font-bold text-indigo-400 flex-shrink-0">
+                  2
+                </div>
+                <p className="text-xs text-slate-300">
+                  Open Google Chrome and go to: <span className="text-indigo-400 font-mono">chrome://extensions/</span>
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-slate-800 text-xs font-mono font-bold text-indigo-400 flex-shrink-0">
+                  3
+                </div>
+                <p className="text-xs text-slate-300">
+                  Turn on <strong>Developer Mode</strong> (top-right toggle), click <strong>Load unpacked</strong> (top-left button), and select the extracted folder.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="border-t border-slate-800/80 pt-6 flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={() => {
+                localStorage.setItem('algovision-onboarding-completed', 'true');
+                setShowOnboarding(false);
+                window.location.href = 'https://leetcode.com/problemset/';
+              }}
+              className="flex-1 px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-md transition-all text-center cursor-pointer"
+            >
+              🚀 Go to LeetCode Problems
+            </button>
+          </div>
+          
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex flex-col h-screen bg-bg-page text-text-main font-sans transition-colors duration-300 ${theme === 'dark' ? 'dark-theme' : ''}`}>
       {/* Branding HUD */}
@@ -884,16 +1123,6 @@ export default function App() {
         )}
 
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => {
-              const nextTheme = theme === 'light' ? 'dark' : 'light';
-              setTheme(nextTheme);
-              localStorage.setItem('algovision-theme', nextTheme);
-            }}
-            className="px-3 py-1.5 rounded-xl border border-border-main bg-bg-panel hover:bg-bg-inner text-text-main text-xs font-semibold font-mono tracking-wider transition-all duration-200 flex items-center gap-1.5 shadow-sm"
-          >
-            {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
-          </button>
           <div className="flex items-center gap-2 border-l border-border-main pl-4">
             <span className="flex h-2 w-2 relative">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -901,6 +1130,26 @@ export default function App() {
             </span>
             <span className="text-[10px] font-bold text-emerald-500 font-mono tracking-wider uppercase">COMPILER ACTIVE</span>
           </div>
+
+          {user && (
+            <div className="flex items-center gap-2.5 border-l border-border-main pl-4">
+              <img
+                src={user.picture}
+                alt={user.name}
+                className="w-7 h-7 rounded-full border border-border-main shadow-sm"
+                referrerPolicy="no-referrer"
+              />
+              <div className="hidden sm:flex flex-col">
+                <span className="text-[11px] font-semibold leading-none text-text-main">{user.name}</span>
+                <button
+                  onClick={handleLogout}
+                  className="text-[9px] text-text-muted hover:text-red-500 text-left font-mono tracking-wider underline cursor-pointer mt-0.5"
+                >
+                  Logout
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 

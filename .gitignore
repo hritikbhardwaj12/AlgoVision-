@@ -17,3 +17,5 @@ dist/
 # Local Vite/TypeScript cache
 .vite/
 .tsbuildinfo
+
+.vercel

@@ -15,26 +15,26 @@
 }
 
 :root {
-  /* LeetCode Light Mode Theme default */
-  --bg-page: #fafafa;
-  --bg-panel: #ffffff;
-  --bg-inner: #f2f3f4;
-  --border-main: #e5e5e5;
-  --text-main: #1a1a1a;
-  --text-muted: #586069;
+  /* Rich Deep-Blue Theme (Default) */
+  --bg-page: #020617;      /* slate-955 */
+  --bg-panel: #0f172a;     /* slate-900 */
+  --bg-inner: #070a13;     /* slate-950/40 blend */
+  --border-main: #1e293b;  /* slate-800 */
+  --text-main: #eff1f3;
+  --text-muted: #94a3b8;   /* slate-400 */
   --brand-color: #2db55d;
   --brand-hover: #24904c;
-  --monaco-theme: vs;
+  --monaco-theme: vs-dark;
 }
 
 .dark-theme {
-  /* LeetCode Dark Mode Theme */
-  --bg-page: #1a1a1a;
-  --bg-panel: #282828;
-  --bg-inner: #1e1e1e;
-  --border-main: #3e3e3e;
+  /* Keep aligned with root */
+  --bg-page: #020617;
+  --bg-panel: #0f172a;
+  --bg-inner: #070a13;
+  --border-main: #1e293b;
   --text-main: #eff1f3;
-  --text-muted: #a1a6ac;
+  --text-muted: #94a3b8;
   --brand-color: #2db55d;
   --brand-hover: #24904c;
   --monaco-theme: vs-dark;

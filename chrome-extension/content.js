@@ -1,5 +1,7 @@
 let childWindow = null;
 let lastSentCode = "";
+const BASE_URL = "https://algo-vision-tan.vercel.app"; // Update with your actual Vercel URL
+
 
 const isInsideTestcase = (el) => {
   return !!el.closest('[class*="testcase"], [class*="test-case"], [class*="console"], [id*="testcase"], [id*="test-case"], [id*="console"]');
@@ -176,7 +178,7 @@ function injectBridge() {
   btn.setAttribute('data-version', CURRENT_VERSION);
   btn.innerText = '🔮 Visualize Code';
   btn.target = '_blank';
-  btn.href = 'http://localhost:5173/';
+  btn.href = `${BASE_URL}/?source=extension`;
   
   Object.assign(btn.style, {
     position: 'fixed',
@@ -258,7 +260,7 @@ function injectBridge() {
       }
 
       if (!codeText) {
-        btn.href = 'http://localhost:5173/';
+        btn.href = `${BASE_URL}/?source=extension`;
         return;
       }
 
@@ -331,10 +333,11 @@ function injectBridge() {
       const queryParams = new URLSearchParams({
         code: codeText,
         examples: JSON.stringify(examples),
-        title: titleVal
+        title: titleVal,
+        source: 'extension'
       });
 
-      btn.href = `http://localhost:5173/?${queryParams.toString()}`;
+      btn.href = `${BASE_URL}/?${queryParams.toString()}`;
     } catch (err) {
       alert("Scraping error: " + err.message);
     }

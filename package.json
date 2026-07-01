@@ -10,14 +10,18 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.6.0",
+    "google-auth-library": "^9.15.0",
     "lucide-react": "^0.475.0",
+    "mongodb": "^6.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
+    "@types/node": "^26.0.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@vercel/node": "^5.8.22",
     "@vitejs/plugin-react": "^4.3.4",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",
